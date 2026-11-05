@@ -73,6 +73,7 @@ Die Simulation trifft dafür die Annahmen aus Abschnitt 5. Falls das Regelwerk a
 - **Weniger als drei verdeckte Karten:** Die Pflicht von drei Karten gilt dann nicht mehr. Modell: Pflicht sind nur noch die verdeckten Karten.
 - **Mitte:** Ein Joker gewinnt auch dort immer. Sonst Rot oder Schwarz 50 : 50 (Farben werden nicht simuliert).
 - **§ 5, Strategie:** Nach drei Treffern gibt der Spieler immer weiter.
+- **Freie Wahl des Feldes:** Bei jeder Karte darf an jeder Stelle weitergemacht werden, die an eine offene Karte grenzt. Man muss nicht bei der zuletzt aufgedeckten Karte anschließen.
 
 ## 5. Modell der Simulation
 

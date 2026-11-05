@@ -137,6 +137,11 @@
 
   ul.assume { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; color: var(--ink2); max-width: 65ch; }
   ul.assume b { color: var(--ink); font-weight: 600; }
+  a { color: var(--c0); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--c0); outline-offset: 2px; border-radius: 2px; }
+  .repo { margin-top: 12px; font-size: 14px; color: var(--ink2); }
+  .repo a { font-weight: 600; }
+  footer { border-top: 1px solid var(--line); padding-top: 18px; font-size: 14px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; }
 
   @media (max-width: 520px) {
     .row { grid-template-columns: 5.4rem 1fr 3.6rem; gap: 8px; }
@@ -152,6 +157,7 @@
     <div class="eyebrow">Fenster aufmachen · Simulator</div>
     <h1>Fenster-Simulator</h1>
     <p class="lead">Macht die Jokerregel das Spiel leichter oder schwerer? Jeder Lauf spielt dieselben Fenster einmal ohne Joker und einmal mit Jokern und Sperrregel und vergleicht beides.</p>
+    <p class="repo">Quellcode, Tests und Kommandozeile: <a href="https://github.com/motzik/fenster-sim" target="_blank" rel="noopener">github.com/motzik/fenster-sim</a></p>
   </header>
 
   <section>
@@ -256,9 +262,15 @@
       <li><b>Pflichtkarten</b>: Nach drei Treffern gibt der Spieler weiter. Sind weniger als drei Karten verdeckt, gilt die Pflicht nur für diese.</li>
       <li><b>Mitte</b>: Rot oder Schwarz, 50 : 50.</li>
       <li><b>Spieler</b> kennen alle offenen Karten, zählen aber keine Karten mit. Unbekannt ist für sie alles, was nicht offen im Fenster liegt.</li>
+      <li><b>Freie Wahl</b>: Bei jeder Karte darf an jeder Stelle weitergemacht werden, die an eine offene Karte grenzt. Man muss nicht bei der zuletzt aufgedeckten Karte anschließen.</li>
       <li><b>Einzelne Züge</b>: Von den vier Ecken aus werden zufällig 0 bis 12 weitere Karten aufgedeckt, dann wird ein Zug gespielt.</li>
     </ul>
   </section>
+
+  <footer>
+    <span>Fenster aufmachen · Simulator</span>
+    <a href="https://github.com/motzik/fenster-sim" target="_blank" rel="noopener">Code auf GitHub</a>
+  </footer>
 </div>
 
 <script type="text/plain" id="sim-src">
