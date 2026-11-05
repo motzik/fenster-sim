@@ -64,7 +64,7 @@ Die Simulation trifft dafür die Annahmen aus Abschnitt 5. Falls das Regelwerk a
 - „Verbundene Karten“ in § 7: wie viele genau, und zählt die falsche Karte selbst mit? Ein Beispiel im Regelwerk fehlt.
 - § 5: Muss man nach drei Treffern sofort entscheiden, oder erst bei Misserfolg?
 - Ein Feld, das an einen offenen Joker und an eine normale offene Karte grenzt: gesperrt oder erlaubt? (Annahme: gesperrt, solange ein anderes Feld ohne Joker-Nachbarn existiert.)
-- Wie wird ein offener Joker als Referenz behandelt? (Annahme: gar nicht, er liefert keinen Vergleichswert.)
+- ~~Wie wird ein offener Joker als Referenz behandelt?~~ Entschieden: Daneben ist alles richtig außer ein Joker (siehe unten).
 
 ### Vom Autor entschieden (5. November 2026, für die Spielsimulation)
 
@@ -74,6 +74,9 @@ Die Simulation trifft dafür die Annahmen aus Abschnitt 5. Falls das Regelwerk a
 - **Mitte:** Ein Joker gewinnt auch dort immer. Sonst Rot oder Schwarz 50 : 50 (Farben werden nicht simuliert).
 - **§ 5, Strategie:** Nach drei Treffern gibt der Spieler immer weiter.
 - **Freie Wahl des Feldes:** Bei jeder Karte darf an jeder Stelle weitergemacht werden, die an eine offene Karte grenzt. Man muss nicht bei der zuletzt aufgedeckten Karte anschließen.
+- **Feld neben einem offenen Joker:** Jede Vorhersage ist richtig, außer die aufgedeckte Karte ist selbst ein Joker (dann hätte man „Gleich“ sagen müssen). Das ersetzt die frühere Annahme „Ein offener Joker ist keine Referenz“. Genau deshalb gibt es die Sperrregel: Diese fast sicheren Karten dürfen nicht für die Pflichtkarten genutzt werden.
+- **Weiterspielen nach den Pflichtkarten (neu, ersetzt „Gratiskarten“ und „immer weitergeben“):** Der Spieler deckt freiwillig weiter auf und verteilt dafür nach § 6 Schlucke. Er nimmt jeweils die beste Karte (ohne Sperre) und macht weiter, solange `p ≥ Schwelle` und `p · Gewinn > (1 − p) · (erspielte Schlucke + Schlucke nach § 7 bei einem Fehler)`. Die Schwelle ist ein Wert für alle Spieler, Standard 80 % (`--schwelle`, im Browser „Weiterspielen ab“). Felder neben Jokern (um 98 %) fallen fast immer darunter. Eine Normalverteilung der Schwelle pro Spieler (z. B. 80 % ± 7,5 %) ist vorgeschlagen, aber noch nicht eingebaut.
+- **Folge ohne Joker:** Alle Spieler wählen dieselbe beste Karte. Ob ein Spieler weitermacht oder der nächste übernimmt, ergibt dann genau dieselbe Kartenfolge und dieselben Fehler. Die Schwelle ändert ohne Joker nur die Zahl der Züge und die verteilten Schlucke. Mit Jokern ist das anders, weil die Sperre nur für Pflichtkarten gilt.
 
 ## 5. Modell der Simulation
 
@@ -88,13 +91,16 @@ Ein perfekter Spieler spielt einen Zug:
 
 Joker im Modell:
 
-- Ein verdeckter Joker gewinnt jede Wette. Liegt ein offener Joker neben dem Feld, gewinnt er nur bei „Gleich“ auf den Joker.
-- Ein offener Joker ist keine Referenzkarte. Ein Feld, dessen offene Nachbarn nur Joker sind, kann nur auf „Gleich (Joker)“ wetten.
+- Ein verdeckter Joker gewinnt jede Wette, solange kein offener Joker neben dem Feld liegt.
+- Liegt ein offener Joker neben dem Feld, ist die Wette `jokerfree`: richtig ist alles außer ein Joker. Trefferchance (unbekannte Karten − unbekannte Joker) / unbekannte Karten, mit einem Blatt meist um 98 %.
 - Ein Joker im Stapel verkleinert die Chancen der normalen Wetten, weil sich der Nenner um ihn vergrößert, hebt sie aber durch den Joker-Gewinn wieder an.
+- (Bis 5. November 2026 galt hier die Annahme, dass ein offener Joker keine Referenz ist. Felder daneben gewannen dann nur mit „Gleich (Joker)“.)
 
 Zufallszahlen: mulberry32 mit Seed. Der Browser teilt die Züge in feste Blöcke zu 25.000 mit Seed `seed + blockIndex * 1000003`. Dadurch ist das Ergebnis unabhängig von der Anzahl der Threads reproduzierbar.
 
 ## 6. Bisherige Ergebnisse
+
+> **Überholt:** Alle Ergebnisse in diesem Abschnitt bis zur Überschrift „Ganze Spiele mit Joker-Nachbarn und Gratiskarten“ beruhen noch auf der alten Annahme, dass ein offener Joker keine Referenz ist. Felder daneben waren damit fast unmöglich statt fast sicher. Die Zahlen stehen nur noch zum Nachvollziehen hier.
 
 Je 1.000.000 simulierte Züge, Seed 2026, mit dem Code aus Abschnitt 8.
 
@@ -111,7 +117,7 @@ Lesart:
 - Ein zweites Blatt senkt die Chancen stärker als alle Jokervarianten (etwa 2 Prozentpunkte).
 - Plausibilitätscheck: Die beobachtete Trefferquote pro Karte stimmt mit der Ø berechneten Chance überein (Abweichung unter 0,2 Prozentpunkten). Das spricht dafür, dass Wettwahl und Gewinnprüfung konsistent sind.
 
-### Ganze Spiele (seit 5. November 2026)
+### Ganze Spiele, alte Joker-Annahme (5. November 2026, überholt)
 
 Je 100.000 Spiele, Seed 2026, `node cli.js --n 100000` (bzw. `--blatt 2`). Ein Spiel läuft vom Auslegen bis zur richtig aufgedeckten Mitte, mit den Regeln aus Abschnitt 4 („Vom Autor entschieden“). Der Spieler zählt keine Karten mit.
 
@@ -127,6 +133,43 @@ Lesart:
 - Über ganze Spiele gemessen macht die Jokerregel das Spiel **deutlich schwerer**: etwa 28 % mehr Züge mit einem Blatt, etwa 47 % mehr mit zwei Blättern. Die Zugsimulation (oben) hatte nur 0,3 Prozentpunkte gezeigt.
 - Grund: In echten Spielverläufen greift die Sperre in gut 10 % der Pflichtentscheidungen statt in 1,6 % bis 2,3 % bei den zufälligen Spielständen. Offene Joker bleiben lange liegen, weil Fehler das Fenster immer wieder abräumen und neu auflegen.
 - Weil § 7 meist fast das ganze Fenster abräumt, ist die Verteilung sehr schief. Ein paar Spiele dauern über 1.000 Züge. Median und 90-%-Wert sind darum aussagekräftiger als der Durchschnitt.
+
+### Ganze Spiele mit Schwelle (aktueller Stand)
+
+Je 100.000 Spiele, Seed 2026, `node cli.js --n 100000` mit `--blatt 2` bzw. `--schwelle 70 | 90 | aus`. Ausgaben in `ergebnisse/`.
+
+| Blatt | Schwelle | Joker | Ø Züge | Median | 90 % | Ø Fehler | Ø getrunken § 7 | Ø Zusatzkarten | davon neben Joker | Ø verteilt § 6 | Sperre greift |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 52 | 80 % | 0 | 104,9 ± 0,6 | 74 | ≤ 237 | 135,1 | 727 | 67,3 | – | 95,4 | – |
+| 52 | 80 % | 2 | 65,1 ± 0,4 | 46 | ≤ 145 | 84,0 | 487 | 75,0 | 23,5 | 129,0 | 12,3 % |
+| 104 | 80 % | 0 | 120,9 ± 0,7 | 85 | ≤ 274 | 160,9 | 835 | 65,5 | – | 87,1 | – |
+| 104 | 80 % | 6 | 60,0 ± 0,3 | 43 | ≤ 133 | 80,7 | 461 | 74,9 | 31,9 | 131,7 | 17,3 % |
+| 52 | 70 % | 0 / 2 | 94,7 / 57,0 | 67 / 41 | | 135,1 / 83,7 | | 92,0 / 93,9 | – / 23,5 | 135,6 / 163,0 | – / 12,7 % |
+| 52 | 90 % | 0 / 2 | 121,0 / 77,1 | 85 / 55 | | 135,1 / 83,5 | | 22,9 / 40,4 | – / 23,2 | 28,2 / 63,3 | – / 11,4 % |
+| 52 | aus | 0 / 2 | 127,8 / 59,2 | 90 / 42 | | 135,1 / 67,6 | | 0 / 0 | – | 0 / 0 | – / 73,4 % |
+
+Lesart:
+
+- **Mit Jokern deutlich leichter:** bei 80 % etwa 38 % weniger Züge (1 Blatt) bzw. 50 % weniger (2 Blätter), dazu rund ein Drittel mehr verteilte Schlucke.
+- **Ohne Joker** sind Fehler und getrunkene Schlucke bei jeder Schwelle gleich (135,1 und 727). Die Schwelle ändert nur, wie viele Züge es braucht und wer verteilt.
+- **Mit Jokern** kostet Weiterspielen etwas: Fehler steigen von 67,6 (nie weiter) auf rund 84. Die leichten Felder neben Jokern werden als freiwillige Karten verbraucht, statt später als fast sichere Pflichtkarten zu helfen, und Joker neben Joker räumt nach § 7 viel ab.
+- Die Felder neben Jokern (rund 23 pro Spiel) nimmt der Spieler bei jeder Schwelle praktisch alle mit.
+
+Je 100.000 Spiele, Seed 2026, `node cli.js --n 100000` (bzw. `--blatt 2`, `--gratis aus`). Regeln wie in Abschnitt 4 „Vom Autor entschieden“: Feld neben offenem Joker ist richtig außer bei einem Joker, Sperrregel in den Pflichtkarten, freiwillige Gratiskarten danach.
+
+| Blatt | Joker | Gratiskarten | Ø Züge | Median | 90 % | Ø Fehler | Ø getrunken § 7 | Ø Gratiskarten | Ø verteilt § 6 | Sperre greift |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 52 | 0 (Fall 1) | – | 127,8 ± 0,8 | 90 | ≤ 288 | 135,1 | 727 | – | – | – |
+| 52 | 2 (Fall 2) | an | 82,6 ± 0,5 | 58 | ≤ 185 | 83,6 | 484 | 23,3 | 32,9 | 10,9 % |
+| 52 | 2 (Fall 2) | aus | 59,2 ± 0,3 | 42 | ≤ 130 | 67,6 | 322 | – | – | 73,4 % |
+| 104 | 0 (Fall 1) | – | 143,1 ± 0,9 | 101 | ≤ 325 | 160,9 | 835 | – | – | – |
+| 104 | 6 (Fall 2) | an | 75,7 ± 0,4 | 54 | ≤ 169 | 81,6 | 466 | 32,1 | 47,0 | 15,6 % |
+
+Lesart:
+
+- Mit der richtigen Joker-Regel wird das Spiel mit Jokern **deutlich leichter**: etwa 35 % weniger Züge mit einem Blatt, etwa 47 % weniger mit zwei Blättern. Das frühere Ergebnis („schwerer“) kam allein von der falschen Annahme zum Joker als Referenz.
+- Gratiskarten bringen dem Spieler im Schnitt rund 33 (bzw. 47) verteilte Schlucke pro Spiel, **verlängern aber das Spiel** von 59 auf 83 Züge. Grund: Ohne Gratiskarten bleiben die Felder neben Jokern liegen, bis sonst nichts mehr frei ist. Dann entfällt die Sperre, und sie werden zu fast sicheren Pflichtkarten. Mit Gratiskarten sind diese leichten Felder schon verbraucht, und der seltene Fehler (Joker neben Joker) räumt nach § 7 viel ab.
+- Der Spieler im Modell entscheidet über Gratiskarten nur nach seinen eigenen Schlucken, nicht nach der Spieldauer. Das entspricht vermutlich dem echten Verhalten am Tisch.
 
 Frühere Vorabrechnung (nur Spielstände, ohne simulierte Züge, 40.000 Stände): Die beste Wette auf die nächste Karte liegt im Schnitt bei etwa 88 %, mit und ohne Joker praktisch gleich. Die Sperrregel änderte den besten Zug dort in etwa 0,7 % (einfach) bis 1,1 % (doppelt) der Stände. Diese Zahlen sind durch die Zugsimulation überholt.
 

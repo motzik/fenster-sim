@@ -1,0 +1,9 @@
+
+Fenster aufmachen · ganze Spiele · 52 Karten · Schwelle 70 % · Seed 2026 · 12 Threads
+
+Fall            Joker   Spiele  Ø Züge  ± 95 %  Median  90 %  Ø Fehler  Ø getrunken §7  Ø Zusatz  davon Joker  Ø verteilt §6  Sperre greift
+──────────────  ─────  ───────  ──────  ──────  ──────  ────  ────────  ──────────────  ────────  ───────────  ─────────────  ─────────────
+1 · ohne Joker  0      100 000    94,7     0,6      67   214     135,1             727      92,0            –          135,6              –
+2 · mit Sperre  2      100 000    57,0     0,3      41   126      83,7             485      93,9         23,5          163,0        12,65 %
+
+Rechenzeit: 45,7 s, 29,4 s

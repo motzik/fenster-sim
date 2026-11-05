@@ -53,7 +53,9 @@ function sumRange(counts, lo, hi) {
 }
 
 // Beste Wette für ein verdecktes Feld. Referenzkarten sind die offenen Nachbarn.
-// Ein offener Joker ist keine Referenz. Liegt ein Joker daneben, gewinnt ein verdeckter Joker nur bei "Gleich".
+// Liegt ein offener Joker daneben, ist jede Vorhersage richtig, außer die Karte ist selbst ein Joker
+// (dann hätte man "Gleich" sagen müssen). Diese Wette heißt 'jokerfree' und schlägt alle anderen.
+// Ohne Joker daneben gewinnt ein verdeckter Joker jede Wette.
 function bestBet(cell, st) {
   var nb = NEIGHBORS[cell], vals = [], jokerNb = false, i, v;
   for (i = 0; i < nb.length; i++) {
@@ -62,23 +64,23 @@ function bestBet(cell, st) {
     if (v === 0) jokerNb = true;
     else if (vals.indexOf(v) < 0) vals.push(v);
   }
-  vals.sort(function (x, y) { return x - y; });
   var c = st.counts, N = st.N;
-  var jb = jokerNb ? 0 : c[0] / N;
-  var best = jokerNb
-    ? { p: c[0] / N, kind: 'jokereq', a: 0, b: 0, jok: false }
-    : { p: -1, kind: 'none', a: 0, b: 0, jok: true };
+  // Neben einem offenen Joker: alles richtig außer ein Joker. Die beste Wette überhaupt.
+  if (jokerNb) return { p: (N - c[0]) / N, kind: 'jokerfree', a: 0, b: 0, jok: false };
+  vals.sort(function (x, y) { return x - y; });
+  var jb = c[0] / N;
+  var best = { p: -1, kind: 'none', a: 0, b: 0, jok: true };
   var p, j;
   for (i = 0; i < vals.length; i++) {
     v = vals[i];
-    p = sumRange(c, v + 1, 14) / N + jb; if (p > best.p) best = { p: p, kind: 'gt', a: v, b: 0, jok: !jokerNb };
-    p = sumRange(c, 2, v - 1) / N + jb;  if (p > best.p) best = { p: p, kind: 'lt', a: v, b: 0, jok: !jokerNb };
-    p = c[v] / N + jb;                   if (p > best.p) best = { p: p, kind: 'eq', a: v, b: 0, jok: !jokerNb };
+    p = sumRange(c, v + 1, 14) / N + jb; if (p > best.p) best = { p: p, kind: 'gt', a: v, b: 0, jok: true };
+    p = sumRange(c, 2, v - 1) / N + jb;  if (p > best.p) best = { p: p, kind: 'lt', a: v, b: 0, jok: true };
+    p = c[v] / N + jb;                   if (p > best.p) best = { p: p, kind: 'eq', a: v, b: 0, jok: true };
     for (j = i + 1; j < vals.length; j++) {
       p = sumRange(c, vals[i] + 1, vals[j] - 1) / N + jb;
-      if (p > best.p) best = { p: p, kind: 'between', a: vals[i], b: vals[j], jok: !jokerNb };
+      if (p > best.p) best = { p: p, kind: 'between', a: vals[i], b: vals[j], jok: true };
       p = (sumRange(c, 2, vals[i] - 1) + sumRange(c, vals[j] + 1, 14)) / N + jb;
-      if (p > best.p) best = { p: p, kind: 'outside', a: vals[i], b: vals[j], jok: !jokerNb };
+      if (p > best.p) best = { p: p, kind: 'outside', a: vals[i], b: vals[j], jok: true };
     }
   }
   return best;
@@ -88,6 +90,7 @@ function bestBet(cell, st) {
 function wins(bet, v) {
   if (v === 0) return bet.kind === 'jokereq' || bet.jok;
   switch (bet.kind) {
+    case 'jokerfree': return true;
     case 'gt': return v > bet.a;
     case 'lt': return v < bet.a;
     case 'eq': return v === bet.a;
@@ -221,7 +224,8 @@ function runBatch(cfg) {
 //   Stapel leer: Die entfernten Karten werden gemischt und bilden den neuen Stapel.
 //   Weniger als drei verdeckte Karten: Pflicht sind nur noch die verdeckten Karten.
 //   Mitte: Rot oder Schwarz, 50 : 50. Ein Joker gewinnt immer.
-//   Strategie: Nach den Pflichtkarten gibt der Spieler sofort weiter.
+//   Strategie: Nach den Pflichtkarten spielt der Spieler freiwillig weiter, solange die beste Karte
+//        seine Schwelle erreicht und sich lohnt (siehe keepPlaying). Ohne Schwelle gibt er sofort weiter.
 // Der Spieler zählt keine Karten mit: Unbekannt ist für ihn alles, was nicht offen im Fenster liegt.
 var GAME_BINS = 2000; // Histogramm der Züge pro Spiel, das letzte Fach sammelt alles darüber
 
@@ -257,7 +261,8 @@ function emptyGameStats() {
   var hist = [];
   for (var i = 0; i <= GAME_BINS; i++) hist.push(0);
   return { games: 0, aborted: 0, turns: 0, turns2: 0, attempts: 0, fails: 0, sips: 0, relaid: 0,
-    midTries: 0, midFails: 0, reshuffles: 0, mand: 0, changed: 0, loss: 0, hist: hist };
+    midTries: 0, midFails: 0, reshuffles: 0, mand: 0, changed: 0, loss: 0,
+    extraTries: 0, extraHits: 0, extraJoker: 0, given: 0, hist: hist };
 }
 
 function mergeGameStats(a, b) {
@@ -309,30 +314,71 @@ function failAt(st, g, rng, stats, cell) {
   if (g.log) g.log.push({ t: 'fail', cells: logCells(st, comp), sips: comp.length - 1 });
 }
 
+// Spielt der Spieler nach den Pflichtkarten noch eine Karte? Alle Werte in Schlucken bzw. als Chance.
+//   p         Trefferchance der besten Karte (neben einem offenen Joker meist um 98 %)
+//   threshold Schwelle des Spielers: darunter traut er sich nicht (z. B. 0,8)
+//   gain      Schlucke, die diese Karte nach § 6 bringt (4. Karte 1, 5. Karte 2, ...)
+//   earned    Schlucke, die in diesem Zug schon erspielt sind und bei einem Fehler verfallen
+//   risk      Schlucke, die er bei einem Fehler nach § 7 selbst trinkt
+// TODO(human): Entscheidungsregel. Im Moment müssen beide Bedingungen gelten: Schwelle erreicht und
+// erwarteter Gewinn größer als das erwartete Risiko.
+function keepPlaying(p, threshold, gain, earned, risk) {
+  return p >= threshold && p * gain > (1 - p) * (earned + risk);
+}
+
 // Spielt ein Fenster zu Ende. Gibt die Anzahl der Züge zurück oder -1 bei Abbruch.
+// Ablauf eines Zuges: Pflichtkarten (mit Sperrregel), danach freiwillige Karten, solange keepPlaying
+// zustimmt. Ein Fehler startet den Zug neu (§ 7), erspielte Schlucke verfallen.
 function playGame(st, g, rng, stats, maxTurns, maxAttempts) {
-  var turns = 0, attempts = 0, hits, need, r;
+  var turns = 0, attempts = 0, hits, need, earned, r, bet, risk, gain, hit;
+  function restart() { hits = 0; earned = 0; need = Math.min(3, CELLS.length - g.open); return ++attempts <= maxAttempts; }
   while (turns < maxTurns) {
     turns++;
-    hits = 0; need = Math.min(3, CELLS.length - g.open); attempts++;
     if (g.log) g.log.push({ t: 'turn', n: turns });
-    while (hits < need) {
-      r = playCard(st, rng, stats);
-      if (g.log) g.log.push({ t: 'card', cell: r.cell, v: st.value[r.cell], hit: r.hit, kind: r.bet.kind, a: r.bet.a, b: r.bet.b, p: r.bet.p, blocked: r.blocked });
-      if (r.hit) {
-        reveal(st, r.cell); g.open++; hits++;
-        if (r.cell === MID) { if (g.log) g.log.push({ t: 'end', n: turns }); return turns; }
+    if (!restart()) return -1;
+    while (true) {
+      if (hits < need) {
+        r = playCard(st, rng, stats);
+        if (g.log) g.log.push({ t: 'card', cell: r.cell, v: st.value[r.cell], hit: r.hit, kind: r.bet.kind, a: r.bet.a, b: r.bet.b, p: r.bet.p, blocked: r.blocked });
+        if (r.hit) {
+          reveal(st, r.cell); g.open++; hits++;
+          if (r.cell === MID) { stats.given += earned; if (g.log) g.log.push({ t: 'end', n: turns }); return turns; }
+        } else {
+          failAt(st, g, rng, stats, r.cell);
+          if (!restart()) return -1;
+        }
+        continue;
+      }
+      // Pflicht erfüllt: freiwillig weiter mit der besten Karte (ohne Sperre), solange es sich lohnt.
+      gain = hits - 2;
+      if (g.threshold == null || gain < 1) break;
+      bet = pick(st, false);
+      if (!bet) break; // nur noch die Mitte verdeckt
+      risk = component(st, bet.cell).length - 1;
+      if (!keepPlaying(bet.p, g.threshold, gain, earned, risk)) break;
+      hit = wins(bet, st.value[bet.cell]);
+      stats.extraTries++;
+      if (bet.kind === 'jokerfree') stats.extraJoker++;
+      if (g.log) g.log.push({ t: 'card', cell: bet.cell, v: st.value[bet.cell], hit: hit, kind: bet.kind, a: bet.a, b: bet.b, p: bet.p, blocked: false, extra: true });
+      if (hit) {
+        reveal(st, bet.cell); g.open++; hits++; earned += gain; stats.extraHits++;
       } else {
-        failAt(st, g, rng, stats, r.cell);
-        if (++attempts > maxAttempts) return -1;
-        hits = 0; need = Math.min(3, CELLS.length - g.open);
+        failAt(st, g, rng, stats, bet.cell);
+        if (!restart()) return -1;
       }
     }
+    stats.given += earned;
   }
   return -1;
 }
 
-// cfg: { decks, jokers, games, seed, maxTurns, maxAttempts }
+// Schwelle aus der Einstellung: fehlt sie, gilt 0,8. null oder false heißt: nie freiwillig weiterspielen.
+function thresholdOf(cfg) {
+  if (cfg.threshold === undefined) return 0.8;
+  return cfg.threshold === null || cfg.threshold === false ? null : cfg.threshold;
+}
+
+// cfg: { decks, jokers, games, seed, threshold, maxTurns, maxAttempts }
 function runGames(cfg) {
   var rng = makeRng(cfg.seed), maxTurns = cfg.maxTurns || 5000, maxAttempts = cfg.maxAttempts || 50000;
   var deck = [], d, r, i, t, n;
@@ -343,7 +389,7 @@ function runGames(cfg) {
   var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: 0 };
   var stats = emptyGameStats();
   for (t = 0; t < cfg.games; t++) {
-    var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0 };
+    var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, threshold: thresholdOf(cfg) };
     shuffle(g.stack, rng);
     st.revealed.fill(0);
     st.counts.set(base);
@@ -369,7 +415,7 @@ function traceGame(cfg) {
   for (i = 0; i < cfg.jokers; i++) deck.push(0);
   var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: deck.length };
   for (i = 0; i < deck.length; i++) st.counts[deck[i]]++;
-  var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, log: [] };
+  var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, threshold: thresholdOf(cfg), log: [] };
   shuffle(g.stack, rng);
   for (i = 0; i < CELLS.length; i++) st.value[CELLS[i]] = draw(g, rng);
   for (i = 0; i < CORNERS.length; i++) { reveal(st, CORNERS[i]); g.open++; }
@@ -385,7 +431,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // Für Tests: Feldaufbau und Einzelschritte
     HOLES: HOLES, CORNERS: CORNERS, MID: MID, CELLS: CELLS, NEIGHBORS: NEIGHBORS,
     makeRng: makeRng, bestBet: bestBet, wins: wins, pick: pick, reveal: reveal, playTurn: playTurn,
-    component: component, failAt: failAt
+    component: component, failAt: failAt, keepPlaying: keepPlaying
   };
 }
 if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof document === 'undefined') {

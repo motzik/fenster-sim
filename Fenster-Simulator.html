@@ -79,6 +79,8 @@
   select, input[type="number"] { font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); width: 100%; max-width: 220px; font-variant-numeric: tabular-nums; }
   select:focus-visible, input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--c0); outline-offset: 2px; }
   .hint { font-size: 13px; color: var(--muted); }
+  details.hint summary { cursor: pointer; color: var(--ink2); font-weight: 500; }
+  details.hint .explain { margin-top: 6px; color: var(--ink2); max-width: 60ch; }
   .runrow { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; }
   .go { font: inherit; font-size: 15px; font-weight: 600; padding: 10px 20px; border-radius: 8px; border: 0; background: var(--c0); color: #fff; cursor: pointer; }
   .go.stop { background: var(--ink); color: var(--bg); }
@@ -98,6 +100,7 @@
   .cell.face { background: var(--bg); border-color: var(--line); color: var(--ink); }
   .cell.face.joker { color: var(--c1); font-size: clamp(10px, 2.8vw, 13px); letter-spacing: .02em; }
   .cell.hit { box-shadow: 0 0 0 3px var(--s3); transform: translateY(-2px); }
+  .cell.free { box-shadow: 0 0 0 3px var(--c1); transform: translateY(-2px); }
   .cell.miss { box-shadow: 0 0 0 3px var(--bad); background: var(--bad-bg); color: var(--bad); }
   .cell.gone { opacity: .2; transform: scale(.86); }
   .livecap { font-size: 14px; color: var(--ink2); font-variant-numeric: tabular-nums; text-align: center; }
@@ -187,6 +190,27 @@
           <label for="trials" id="trialslab">Spiele pro Fall</label>
           <select id="trials"></select>
         </div>
+        <div class="ctl wide" id="thrctl">
+          <label for="thr">Weiterspielen ab</label>
+          <select id="thr">
+            <option value="aus">nie, immer weitergeben</option>
+            <option value="0.6">60 % Trefferchance</option>
+            <option value="0.7">70 % Trefferchance</option>
+            <option value="0.75">75 % Trefferchance</option>
+            <option value="0.8" selected>80 % Trefferchance</option>
+            <option value="0.85">85 % Trefferchance</option>
+            <option value="0.9">90 % Trefferchance</option>
+            <option value="0.95">95 % Trefferchance</option>
+          </select>
+          <span class="hint">Nach den Pflichtkarten deckt der Spieler weiter auf, solange die beste Karte diese Chance hat und sich die Schlucke lohnen.</span>
+          <details class="hint">
+            <summary>Wann lohnt sich eine Karte?</summary>
+            <p class="explain">Der Spieler vergleicht, was er im Schnitt gewinnt, mit dem, was er im Schnitt verliert:</p>
+            <p class="explain"><b>Gewinn</b> = Trefferchance × Schlucke, die diese Karte bringt (4. Karte 1, 5. Karte 2, 6. Karte 3 …).<br>
+            <b>Risiko</b> = Fehlerchance × (in diesem Zug schon erspielte Schlucke + Schlucke, die er nach § 7 selbst trinken müsste).</p>
+            <p class="explain">Ist der Gewinn größer, spielt er weiter. Beispiel: 4. Karte mit 85 %, an der Stelle hängen 5 offene Karten. Gewinn 0,85 × 1 = 0,85, Risiko 0,15 × 5 = 0,75, also weiter. Hängen 8 Karten dran, ist das Risiko 1,2 und er gibt ab.</p>
+          </details>
+        </div>
         <div class="ctl">
           <label for="seed">Seed</label>
           <input id="seed" type="number" min="0" step="1" value="2026">
@@ -255,11 +279,12 @@
     <ul class="assume">
       <li><b>Ass</b> zählt hoch. <b>Nachbarn</b> sind nur Karten oberhalb, unterhalb, links und rechts.</li>
       <li><b>Gleichstand</b> mit einer Grenzkarte verliert bei „Dazwischen“ und „Nicht dazwischen“.</li>
-      <li><b>Joker</b> sind immer richtig, außer ein offener Joker liegt daneben. Dann zählt nur „Gleich“. Ein offener Joker dient nie als Referenzkarte. Auf der Mitte gewinnt ein Joker immer.</li>
+      <li><b>Joker</b>: Ein aufgedeckter Joker ist immer richtig. Neben einem offenen Joker ist jede Vorhersage richtig, außer die Karte ist selbst ein Joker, dann hätte man „Gleich“ sagen müssen. Auf der Mitte gewinnt ein Joker immer.</li>
       <li><b>Sperrregel</b> in den Pflichtkarten: Felder neben einem offenen Joker sind gesperrt, solange es ein anderes Feld gibt.</li>
+      <li><b>Weiterspielen</b>: Nach den Pflichtkarten deckt der Spieler freiwillig weiter auf und verteilt dafür Schlucke (§ 6: 4. Karte 1, 5. Karte 2 …). Er macht weiter, solange beides gilt: Die beste Karte erreicht seine Schwelle (Standard 80 %), <i>und</i> Trefferchance × Schlucke dieser Karte ist größer als Fehlerchance × (schon erspielte Schlucke + Schlucke, die er nach § 7 selbst trinken müsste). Beispiel: 4. Karte mit 85 %, 5 Karten hängen dran: 0,85 × 1 = 0,85 gegen 0,15 × 5 = 0,75, also weiter. Felder neben einem Joker (um 98 %) nimmt er darum fast immer mit. Die Schwelle gilt für alle Spieler gleich.</li>
       <li><b>Fehler (§ 7)</b>: Die falsche Karte und alle offenen Karten, die mit ihr zusammenhängen, kommen weg, Ecken eingeschlossen. Ecken werden neu offen aufgelegt, alles andere verdeckt. Geschluckt wird pro offener Karte im Zusammenhang.</li>
       <li><b>Stapel leer</b>: Die entfernten Karten werden gemischt und bilden den neuen Stapel.</li>
-      <li><b>Pflichtkarten</b>: Nach drei Treffern gibt der Spieler weiter. Sind weniger als drei Karten verdeckt, gilt die Pflicht nur für diese.</li>
+      <li><b>Pflichtkarten</b>: Sind weniger als drei Karten verdeckt, gilt die Pflicht nur für diese.</li>
       <li><b>Mitte</b>: Rot oder Schwarz, 50 : 50.</li>
       <li><b>Spieler</b> kennen alle offenen Karten, zählen aber keine Karten mit. Unbekannt ist für sie alles, was nicht offen im Fenster liegt.</li>
       <li><b>Freie Wahl</b>: Bei jeder Karte darf an jeder Stelle weitergemacht werden, die an eine offene Karte grenzt. Man muss nicht bei der zuletzt aufgedeckten Karte anschließen.</li>
@@ -329,7 +354,9 @@ function sumRange(counts, lo, hi) {
 }
 
 // Beste Wette für ein verdecktes Feld. Referenzkarten sind die offenen Nachbarn.
-// Ein offener Joker ist keine Referenz. Liegt ein Joker daneben, gewinnt ein verdeckter Joker nur bei "Gleich".
+// Liegt ein offener Joker daneben, ist jede Vorhersage richtig, außer die Karte ist selbst ein Joker
+// (dann hätte man "Gleich" sagen müssen). Diese Wette heißt 'jokerfree' und schlägt alle anderen.
+// Ohne Joker daneben gewinnt ein verdeckter Joker jede Wette.
 function bestBet(cell, st) {
   var nb = NEIGHBORS[cell], vals = [], jokerNb = false, i, v;
   for (i = 0; i < nb.length; i++) {
@@ -338,23 +365,23 @@ function bestBet(cell, st) {
     if (v === 0) jokerNb = true;
     else if (vals.indexOf(v) < 0) vals.push(v);
   }
-  vals.sort(function (x, y) { return x - y; });
   var c = st.counts, N = st.N;
-  var jb = jokerNb ? 0 : c[0] / N;
-  var best = jokerNb
-    ? { p: c[0] / N, kind: 'jokereq', a: 0, b: 0, jok: false }
-    : { p: -1, kind: 'none', a: 0, b: 0, jok: true };
+  // Neben einem offenen Joker: alles richtig außer ein Joker. Die beste Wette überhaupt.
+  if (jokerNb) return { p: (N - c[0]) / N, kind: 'jokerfree', a: 0, b: 0, jok: false };
+  vals.sort(function (x, y) { return x - y; });
+  var jb = c[0] / N;
+  var best = { p: -1, kind: 'none', a: 0, b: 0, jok: true };
   var p, j;
   for (i = 0; i < vals.length; i++) {
     v = vals[i];
-    p = sumRange(c, v + 1, 14) / N + jb; if (p > best.p) best = { p: p, kind: 'gt', a: v, b: 0, jok: !jokerNb };
-    p = sumRange(c, 2, v - 1) / N + jb;  if (p > best.p) best = { p: p, kind: 'lt', a: v, b: 0, jok: !jokerNb };
-    p = c[v] / N + jb;                   if (p > best.p) best = { p: p, kind: 'eq', a: v, b: 0, jok: !jokerNb };
+    p = sumRange(c, v + 1, 14) / N + jb; if (p > best.p) best = { p: p, kind: 'gt', a: v, b: 0, jok: true };
+    p = sumRange(c, 2, v - 1) / N + jb;  if (p > best.p) best = { p: p, kind: 'lt', a: v, b: 0, jok: true };
+    p = c[v] / N + jb;                   if (p > best.p) best = { p: p, kind: 'eq', a: v, b: 0, jok: true };
     for (j = i + 1; j < vals.length; j++) {
       p = sumRange(c, vals[i] + 1, vals[j] - 1) / N + jb;
-      if (p > best.p) best = { p: p, kind: 'between', a: vals[i], b: vals[j], jok: !jokerNb };
+      if (p > best.p) best = { p: p, kind: 'between', a: vals[i], b: vals[j], jok: true };
       p = (sumRange(c, 2, vals[i] - 1) + sumRange(c, vals[j] + 1, 14)) / N + jb;
-      if (p > best.p) best = { p: p, kind: 'outside', a: vals[i], b: vals[j], jok: !jokerNb };
+      if (p > best.p) best = { p: p, kind: 'outside', a: vals[i], b: vals[j], jok: true };
     }
   }
   return best;
@@ -364,6 +391,7 @@ function bestBet(cell, st) {
 function wins(bet, v) {
   if (v === 0) return bet.kind === 'jokereq' || bet.jok;
   switch (bet.kind) {
+    case 'jokerfree': return true;
     case 'gt': return v > bet.a;
     case 'lt': return v < bet.a;
     case 'eq': return v === bet.a;
@@ -497,7 +525,8 @@ function runBatch(cfg) {
 //   Stapel leer: Die entfernten Karten werden gemischt und bilden den neuen Stapel.
 //   Weniger als drei verdeckte Karten: Pflicht sind nur noch die verdeckten Karten.
 //   Mitte: Rot oder Schwarz, 50 : 50. Ein Joker gewinnt immer.
-//   Strategie: Nach den Pflichtkarten gibt der Spieler sofort weiter.
+//   Strategie: Nach den Pflichtkarten spielt der Spieler freiwillig weiter, solange die beste Karte
+//        seine Schwelle erreicht und sich lohnt (siehe keepPlaying). Ohne Schwelle gibt er sofort weiter.
 // Der Spieler zählt keine Karten mit: Unbekannt ist für ihn alles, was nicht offen im Fenster liegt.
 var GAME_BINS = 2000; // Histogramm der Züge pro Spiel, das letzte Fach sammelt alles darüber
 
@@ -533,7 +562,8 @@ function emptyGameStats() {
   var hist = [];
   for (var i = 0; i <= GAME_BINS; i++) hist.push(0);
   return { games: 0, aborted: 0, turns: 0, turns2: 0, attempts: 0, fails: 0, sips: 0, relaid: 0,
-    midTries: 0, midFails: 0, reshuffles: 0, mand: 0, changed: 0, loss: 0, hist: hist };
+    midTries: 0, midFails: 0, reshuffles: 0, mand: 0, changed: 0, loss: 0,
+    extraTries: 0, extraHits: 0, extraJoker: 0, given: 0, hist: hist };
 }
 
 function mergeGameStats(a, b) {
@@ -585,30 +615,71 @@ function failAt(st, g, rng, stats, cell) {
   if (g.log) g.log.push({ t: 'fail', cells: logCells(st, comp), sips: comp.length - 1 });
 }
 
+// Spielt der Spieler nach den Pflichtkarten noch eine Karte? Alle Werte in Schlucken bzw. als Chance.
+//   p         Trefferchance der besten Karte (neben einem offenen Joker meist um 98 %)
+//   threshold Schwelle des Spielers: darunter traut er sich nicht (z. B. 0,8)
+//   gain      Schlucke, die diese Karte nach § 6 bringt (4. Karte 1, 5. Karte 2, ...)
+//   earned    Schlucke, die in diesem Zug schon erspielt sind und bei einem Fehler verfallen
+//   risk      Schlucke, die er bei einem Fehler nach § 7 selbst trinkt
+// TODO(human): Entscheidungsregel. Im Moment müssen beide Bedingungen gelten: Schwelle erreicht und
+// erwarteter Gewinn größer als das erwartete Risiko.
+function keepPlaying(p, threshold, gain, earned, risk) {
+  return p >= threshold && p * gain > (1 - p) * (earned + risk);
+}
+
 // Spielt ein Fenster zu Ende. Gibt die Anzahl der Züge zurück oder -1 bei Abbruch.
+// Ablauf eines Zuges: Pflichtkarten (mit Sperrregel), danach freiwillige Karten, solange keepPlaying
+// zustimmt. Ein Fehler startet den Zug neu (§ 7), erspielte Schlucke verfallen.
 function playGame(st, g, rng, stats, maxTurns, maxAttempts) {
-  var turns = 0, attempts = 0, hits, need, r;
+  var turns = 0, attempts = 0, hits, need, earned, r, bet, risk, gain, hit;
+  function restart() { hits = 0; earned = 0; need = Math.min(3, CELLS.length - g.open); return ++attempts <= maxAttempts; }
   while (turns < maxTurns) {
     turns++;
-    hits = 0; need = Math.min(3, CELLS.length - g.open); attempts++;
     if (g.log) g.log.push({ t: 'turn', n: turns });
-    while (hits < need) {
-      r = playCard(st, rng, stats);
-      if (g.log) g.log.push({ t: 'card', cell: r.cell, v: st.value[r.cell], hit: r.hit, kind: r.bet.kind, a: r.bet.a, b: r.bet.b, p: r.bet.p, blocked: r.blocked });
-      if (r.hit) {
-        reveal(st, r.cell); g.open++; hits++;
-        if (r.cell === MID) { if (g.log) g.log.push({ t: 'end', n: turns }); return turns; }
+    if (!restart()) return -1;
+    while (true) {
+      if (hits < need) {
+        r = playCard(st, rng, stats);
+        if (g.log) g.log.push({ t: 'card', cell: r.cell, v: st.value[r.cell], hit: r.hit, kind: r.bet.kind, a: r.bet.a, b: r.bet.b, p: r.bet.p, blocked: r.blocked });
+        if (r.hit) {
+          reveal(st, r.cell); g.open++; hits++;
+          if (r.cell === MID) { stats.given += earned; if (g.log) g.log.push({ t: 'end', n: turns }); return turns; }
+        } else {
+          failAt(st, g, rng, stats, r.cell);
+          if (!restart()) return -1;
+        }
+        continue;
+      }
+      // Pflicht erfüllt: freiwillig weiter mit der besten Karte (ohne Sperre), solange es sich lohnt.
+      gain = hits - 2;
+      if (g.threshold == null || gain < 1) break;
+      bet = pick(st, false);
+      if (!bet) break; // nur noch die Mitte verdeckt
+      risk = component(st, bet.cell).length - 1;
+      if (!keepPlaying(bet.p, g.threshold, gain, earned, risk)) break;
+      hit = wins(bet, st.value[bet.cell]);
+      stats.extraTries++;
+      if (bet.kind === 'jokerfree') stats.extraJoker++;
+      if (g.log) g.log.push({ t: 'card', cell: bet.cell, v: st.value[bet.cell], hit: hit, kind: bet.kind, a: bet.a, b: bet.b, p: bet.p, blocked: false, extra: true });
+      if (hit) {
+        reveal(st, bet.cell); g.open++; hits++; earned += gain; stats.extraHits++;
       } else {
-        failAt(st, g, rng, stats, r.cell);
-        if (++attempts > maxAttempts) return -1;
-        hits = 0; need = Math.min(3, CELLS.length - g.open);
+        failAt(st, g, rng, stats, bet.cell);
+        if (!restart()) return -1;
       }
     }
+    stats.given += earned;
   }
   return -1;
 }
 
-// cfg: { decks, jokers, games, seed, maxTurns, maxAttempts }
+// Schwelle aus der Einstellung: fehlt sie, gilt 0,8. null oder false heißt: nie freiwillig weiterspielen.
+function thresholdOf(cfg) {
+  if (cfg.threshold === undefined) return 0.8;
+  return cfg.threshold === null || cfg.threshold === false ? null : cfg.threshold;
+}
+
+// cfg: { decks, jokers, games, seed, threshold, maxTurns, maxAttempts }
 function runGames(cfg) {
   var rng = makeRng(cfg.seed), maxTurns = cfg.maxTurns || 5000, maxAttempts = cfg.maxAttempts || 50000;
   var deck = [], d, r, i, t, n;
@@ -619,7 +690,7 @@ function runGames(cfg) {
   var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: 0 };
   var stats = emptyGameStats();
   for (t = 0; t < cfg.games; t++) {
-    var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0 };
+    var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, threshold: thresholdOf(cfg) };
     shuffle(g.stack, rng);
     st.revealed.fill(0);
     st.counts.set(base);
@@ -645,7 +716,7 @@ function traceGame(cfg) {
   for (i = 0; i < cfg.jokers; i++) deck.push(0);
   var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: deck.length };
   for (i = 0; i < deck.length; i++) st.counts[deck[i]]++;
-  var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, log: [] };
+  var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, threshold: thresholdOf(cfg), log: [] };
   shuffle(g.stack, rng);
   for (i = 0; i < CELLS.length; i++) st.value[CELLS[i]] = draw(g, rng);
   for (i = 0; i < CORNERS.length; i++) { reveal(st, CORNERS[i]); g.open++; }
@@ -661,7 +732,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // Für Tests: Feldaufbau und Einzelschritte
     HOLES: HOLES, CORNERS: CORNERS, MID: MID, CELLS: CELLS, NEIGHBORS: NEIGHBORS,
     makeRng: makeRng, bestBet: bestBet, wins: wins, pick: pick, reveal: reveal, playTurn: playTurn,
-    component: component, failAt: failAt
+    component: component, failAt: failAt, keepPlaying: keepPlaying
   };
 }
 if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof document === 'undefined') {
@@ -708,6 +779,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
     setPressed('[data-mode]', 'data-mode', st.mode);
     $('trialslab').textContent = m.label;
     $('trials').innerHTML = m.opts.map(function (n) { return '<option value="' + n + '"' + (n === m.def ? ' selected' : '') + '>' + nf(n) + '</option>'; }).join('');
+    $('thrctl').hidden = st.mode !== 'game';
     $('modehint').textContent = st.mode === 'game'
       ? 'Jedes Fenster wird bis zur Mitte durchgespielt. Verglichen wird, wie viele Züge es braucht.'
       : 'Ein Zug ab einem zufälligen Spielstand. Verglichen wird die Chance auf die drei Pflichtkarten.';
@@ -715,7 +787,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
   function uiRun() {
     $('go').textContent = st.running ? 'Abbrechen' : 'Simulation starten';
     $('go').classList.toggle('stop', st.running);
-    ['trials', 'seed', 'jok'].forEach(function (id) { $(id).disabled = st.running; });
+    ['trials', 'seed', 'jok', 'thr'].forEach(function (id) { $(id).disabled = st.running; });
     document.querySelectorAll('[data-deck],[data-mode]').forEach(function (b) { b.disabled = st.running; });
   }
 
@@ -728,7 +800,8 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
   function sumGame(a) {
     var n = a.games, mean = a.turns / n, sd = Math.sqrt(Math.max(0, a.turns2 / n - mean * mean));
     return { n: n, mean: mean, ci: 1.96 * sd / Math.sqrt(n), med: quantile(a.hist, n, 0.5), q90: quantile(a.hist, n, 0.9),
-      fails: a.fails / n, sips: a.sips / n, relaid: a.relaid / n, share: a.mand ? a.changed / a.mand : 0 };
+      fails: a.fails / n, sips: a.sips / n, relaid: a.relaid / n, share: a.mand ? a.changed / a.mand : 0,
+      extra: a.extraTries / n, extraJoker: a.extraJoker / n, extraRate: a.extraTries ? a.extraHits / a.extraTries : 0, given: a.given / n };
   }
   function sumTurn(a) {
     var p = a.pass3 / a.turns;
@@ -759,8 +832,9 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
     $('verdict').innerHTML = Math.abs(diff) <= noise
       ? 'Kein klarer Unterschied: Mit und ohne Joker dauert ein Fenster etwa gleich lang.'
       : 'Mit Jokern dauert ein Fenster im Schnitt <em>' + nf(Math.abs(diff)) + ' Züge ' + (diff > 0 ? 'länger' : 'kürzer') + '</em> (' + sign(rel * 100, 0) + ' %).';
-    $('duo').innerHTML = kcard(0, df(s0.mean, 1), 'Ø Züge bis das Fenster zu ist, ± ' + df(s0.ci, 1)) +
-      kcard(1, df(s1.mean, 1), 'Ø Züge bis das Fenster zu ist, ± ' + df(s1.ci, 1) + '. Sperre greift bei ' + pf(s1.share, 1) + ' % der Pflichtkarten.');
+    var extraTxt = function (x) { return cfg.threshold === null ? '' : ' ' + nf(x.given) + ' Schlucke verteilt pro Spiel.'; };
+    $('duo').innerHTML = kcard(0, df(s0.mean, 1), 'Ø Züge bis das Fenster zu ist, ± ' + df(s0.ci, 1) + '.' + extraTxt(s0)) +
+      kcard(1, df(s1.mean, 1), 'Ø Züge bis das Fenster zu ist, ± ' + df(s1.ci, 1) + '.' + extraTxt(s1));
     // Verteilung in Stufen zu 50 Zügen, alles über 400 in einer Stufe.
     var STEP = 50, NB = 9, b0 = [], b1 = [], i, k, max = 0;
     for (i = 0; i < NB; i++) { b0.push(0); b1.push(0); }
@@ -777,13 +851,17 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
       rows += barRow(lab, 'Züge', b0[i], b1[i], b0[i] / max * 100, b1[i] / max * 100, fmt);
     }
     $('rows').innerHTML = rows;
-    $('rowsnote').textContent = 'Anteil der Spiele je Stufe. Mit Jokern verschiebt sich die Verteilung zu längeren Spielen. Je ' + nf(s0.n) + ' Spiele.';
+    $('rowsnote').textContent = 'Anteil der Spiele je Stufe. Mit Jokern verschiebt sich die Verteilung zu ' + (diff > 0 ? 'längeren' : 'kürzeren') + ' Spielen. Je ' + nf(s0.n) + ' Spiele.';
     table([
       ['Ø Züge', df(s0.mean, 1), df(s1.mean, 1), sign(diff, 1) + ' (' + sign(rel * 100, 0) + ' %)'],
       ['Median Züge', nf(s0.med), nf(s1.med), sign(s1.med - s0.med, 0)],
       ['90 % der Spiele fertig nach', nf(s0.q90), nf(s1.q90), sign(s1.q90 - s0.q90, 0)],
       ['Ø Fehlversuche', df(s0.fails, 1), df(s1.fails, 1), sign(s1.fails - s0.fails, 1)],
-      ['Ø Schlucke § 7', nf(s0.sips), nf(s1.sips), sign(s1.sips - s0.sips, 0)],
+      ['Ø Schlucke getrunken (§ 7)', nf(s0.sips), nf(s1.sips), sign(s1.sips - s0.sips, 0)],
+      ['Ø Karten nach den Pflichtkarten', df(s0.extra, 1), df(s1.extra, 1), sign(s1.extra - s0.extra, 1)],
+      ['davon neben einem Joker', '–', df(s1.extraJoker, 1), ''],
+      ['Trefferquote dieser Karten', s0.extra ? pf(s0.extraRate, 1) + ' %' : '–', s1.extra ? pf(s1.extraRate, 1) + ' %' : '–', ''],
+      ['Ø Schlucke verteilt (§ 6)', df(s0.given, 1), df(s1.given, 1), sign(s1.given - s0.given, 1)],
       ['Sperre greift', '–', pf(s1.share, 1) + ' %', '']
     ]);
     return { v0: df(s0.mean, 1) + ' Züge', v1: df(s1.mean, 1) + ' Züge', d: sign(rel * 100, 0) + ' %' };
@@ -813,7 +891,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
 
   function renderHist() {
     $('hist').innerHTML = st.history.map(function (h) {
-      return '<tr><td>' + (h.mode === 'game' ? 'Ganze Spiele' : 'Einzelne Züge') + '</td><td class="n">' + h.cards + '</td><td class="n">' + h.jokers +
+      return '<tr><td>' + (h.mode === 'game' ? 'Ganze Spiele · ' + (h.thr === null ? 'ohne Weiterspielen' : 'ab ' + pf(h.thr, 0) + ' %') : 'Einzelne Züge') + '</td><td class="n">' + h.cards + '</td><td class="n">' + h.jokers +
         '</td><td class="n">' + nf(h.n) + '</td><td class="n">' + h.v0 + '</td><td class="n">' + h.v1 + '</td><td class="n">' + h.d + '</td></tr>';
     }).join('') || '<tr><td colspan="7" class="hint">Noch kein Lauf abgeschlossen.</td></tr>';
   }
@@ -846,7 +924,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
     var c = live.cfg, withJokers = live.k % 2 === 1;
     live.pending = ++live.reqs;
     live.pendingInfo = { jokers: withJokers ? c.jokers : 0 };
-    live.worker.postMessage({ mode: 'trace', id: live.pending, decks: c.decks, jokers: live.pendingInfo.jokers,
+    live.worker.postMessage({ mode: 'trace', id: live.pending, decks: c.decks, jokers: live.pendingInfo.jokers, threshold: c.threshold,
       seed: (c.seed + Math.floor(live.k / 2) * 1000003) >>> 0 });
     live.k++;
   }
@@ -875,7 +953,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
     } else if (e.t === 'card') {
       // Karte zeigen: grün bei Treffer, rot bei Fehler. Nach einem Fehler folgt gleich das Ereignis "fail".
       live.val[e.cell] = e.v; live.open[e.cell] = 1;
-      drawCell(e.cell, e.hit ? 'hit' : 'miss');
+      drawCell(e.cell, e.hit ? (e.extra ? 'free' : 'hit') : 'miss');
       if (!e.hit) live.open[e.cell] = 0;
       else (function (cell) { setTimeout(function () { if (live.open[cell]) drawCell(cell); }, 160); })(e.cell);
       if (e.cell === MID) wait = 600;
@@ -894,7 +972,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
   }
   function liveOn(cfg) {
     clearTimeout(live.timer);
-    live.cfg = { decks: cfg.decks, jokers: cfg.jokers, seed: cfg.seed };
+    live.cfg = { decks: cfg.decks, jokers: cfg.jokers, seed: cfg.seed, threshold: cfg.threshold };
     live.trace = null; live.next = null; live.k = 0; live.pending = 0;
     $('livecap').textContent = 'Rechnet …';
     $('livebox').hidden = false; $('resultbox').hidden = true;
@@ -933,13 +1011,14 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
   function start() {
     var jok = Math.max(1, Math.min(12, parseInt($('jok').value, 10) || 1));
     $('jok').value = jok;
-    var cfg = { mode: st.mode, decks: st.decks, jokers: jok, trials: parseInt($('trials').value, 10), seed: Math.max(0, parseInt($('seed').value, 10) || 0) };
+    var thr = $('thr').value === 'aus' ? null : parseFloat($('thr').value);
+    var cfg = { mode: st.mode, decks: st.decks, jokers: jok, threshold: thr, trials: parseInt($('trials').value, 10), seed: Math.max(0, parseInt($('seed').value, 10) || 0) };
     var CHUNK = MODES[cfg.mode].chunk, blocks = Math.ceil(cfg.trials / CHUNK);
     // Jobs abwechselnd für beide Fälle, damit beide gleichmäßig vorankommen. Gleicher Block, gleicher Seed.
     var jobs = [], b, f;
     for (b = 0; b < blocks; b++) for (f = 0; f < 2; f++) {
       var n = Math.min(CHUNK, cfg.trials - b * CHUNK);
-      jobs.push({ id: jobs.length, fall: f, n: n, msg: { mode: cfg.mode, decks: cfg.decks, jokers: f ? cfg.jokers : 0, trials: n, games: n, seed: (cfg.seed + b * 1000003) >>> 0, kMax: 12 } });
+      jobs.push({ id: jobs.length, fall: f, n: n, msg: { mode: cfg.mode, decks: cfg.decks, jokers: f ? cfg.jokers : 0, threshold: cfg.threshold, trials: n, games: n, seed: (cfg.seed + b * 1000003) >>> 0, kMax: 12 } });
     }
     var next = 0, finished = 0, done = 0, total = cfg.trials * 2, agg = [null, null];
     // Ein Kern bleibt für das Live-Fenster und die Seite frei.
@@ -975,7 +1054,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
             stop();
             var h = (cfg.mode === 'game' ? renderGames : renderTurns)(agg, cfg);
             $('status').textContent = 'Fertig in ' + df(sec, 1) + ' s';
-            st.history.unshift({ mode: cfg.mode, cards: cfg.decks * 52, jokers: cfg.jokers, n: cfg.trials, v0: h.v0, v1: h.v1, d: h.d });
+            st.history.unshift({ thr: cfg.threshold, mode: cfg.mode, cards: cfg.decks * 52, jokers: cfg.jokers, n: cfg.trials, v0: h.v0, v1: h.v1, d: h.d });
             if (st.history.length > 10) st.history.pop();
             renderHist();
           } else {

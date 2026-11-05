@@ -50,6 +50,40 @@ for (const [decks, jokers] of [[1, 0], [1, 2]]) {
   });
 }
 
+test('keepPlaying: Schwelle und Schlucke müssen beide passen', () => {
+  assert.equal(sim.keepPlaying(0.98, 0.8, 1, 0, 10), true);   // über der Schwelle, 0,98 > 0,02 · 10
+  assert.equal(sim.keepPlaying(0.98, 0.8, 1, 0, 60), false);  // zu viel auf dem Spiel: 0,98 < 0,02 · 60
+  assert.equal(sim.keepPlaying(0.85, 0.8, 1, 0, 4), true);    // 0,85 > 0,15 · 4 = 0,6
+  assert.equal(sim.keepPlaying(0.85, 0.8, 1, 0, 8), false);   // 0,85 < 0,15 · 8 = 1,2
+  assert.equal(sim.keepPlaying(0.75, 0.8, 5, 0, 0), false);   // unter der Schwelle, egal wie viel es bringt
+});
+
+test('Schwelle aus: nie freiwillig weiter, keine verteilten Schlucke', () => {
+  const off = sim.runGames({ decks: 1, jokers: 2, games: 200, seed: 5, threshold: null });
+  assert.equal(off.extraTries, 0);
+  assert.equal(off.given, 0);
+});
+
+test('Schwelle an: Zusatzkarten, mit Jokern auch neben Jokern', () => {
+  const on = sim.runGames({ decks: 1, jokers: 2, games: 200, seed: 5 }); // Standard 0,8
+  assert.ok(on.extraTries > 0);
+  assert.ok(on.extraJoker > 0);
+  assert.ok(on.extraHits / on.extraTries > 0.8, 'nur Karten ab 80 % werden freiwillig gespielt');
+  assert.ok(on.given > 0);
+  const none = sim.runGames({ decks: 1, jokers: 0, games: 200, seed: 5 });
+  assert.equal(none.extraJoker, 0);
+});
+
+test('Ohne Joker ändert die Schwelle nur die Züge, nicht die aufgedeckten Karten', () => {
+  // Alle wählen dieselbe beste Karte. Ob der Spieler weitermacht oder der nächste übernimmt,
+  // ergibt dieselbe Kartenfolge. Erst die Sperrregel (nur in Pflichtkarten) macht einen Unterschied.
+  const a = sim.runGames({ decks: 1, jokers: 0, games: 300, seed: 9, threshold: null });
+  const b = sim.runGames({ decks: 1, jokers: 0, games: 300, seed: 9, threshold: 0.8 });
+  assert.equal(a.fails, b.fails);
+  assert.equal(a.sips, b.sips);
+  assert.ok(b.turns < a.turns);
+});
+
 test('Spiele: gleicher Seed, gleiches Ergebnis', () => {
   const cfg = { decks: 1, jokers: 2, games: 100, seed: 99 };
   assert.deepEqual(sim.runGames(cfg), sim.runGames(cfg));

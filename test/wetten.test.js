@@ -37,18 +37,20 @@ test('bestBet: verdeckter Joker zählt als Treffer, wenn kein Joker daneben lieg
   near(bet.p, 50 / 53);
 });
 
-test('bestBet: nur ein Joker daneben, also nur "Gleich (Joker)"', () => {
-  // 54 Karten, ein Joker offen, 53 unbekannt, davon 1 Joker.
+test('bestBet: Joker daneben, alles richtig außer ein Joker', () => {
+  // 54 Karten, ein Joker offen, 53 unbekannt, davon 1 Joker. Richtig sind die 52 anderen.
   const bet = sim.bestBet(1, makeState({ jokers: 2, open: { 0: 0 } }));
-  assert.equal(bet.kind, 'jokereq');
+  assert.equal(bet.kind, 'jokerfree');
   assert.equal(bet.jok, false);
-  near(bet.p, 1 / 53);
+  near(bet.p, 52 / 53);
 });
 
-test('bestBet: Joker und normale Karte daneben', () => {
-  // Offen: ein Joker auf Feld 0 und ein Ass auf Feld 2. 2 Joker im Stapel.
+test('bestBet: Joker und normale Karte daneben, der Joker zählt', () => {
+  // Offen: ein Joker auf Feld 0 und ein Ass auf Feld 2. Unbekannt: 52, davon 1 Joker.
+  // "Drunter Ass" hätte 48 / 52, die Joker-Wette 51 / 52.
   const bet = sim.bestBet(1, makeState({ jokers: 2, open: { 0: 0, 2: 14 } }));
-  // TODO(human): Erwartete Wette von Hand ausrechnen und prüfen (kind, a, jok, p).
+  assert.equal(bet.kind, 'jokerfree');
+  near(bet.p, 51 / 52);
 });
 
 test('wins: alle Wettarten mit Gleichstand an der Grenze', () => {
@@ -71,8 +73,9 @@ test('wins: alle Wettarten mit Gleichstand an der Grenze', () => {
 test('wins: Joker', () => {
   assert.equal(sim.wins({ kind: 'gt', a: 8, jok: true }, 0), true);   // kein Joker daneben
   assert.equal(sim.wins({ kind: 'gt', a: 8, jok: false }, 0), false); // Joker daneben, falsche Wette
-  assert.equal(sim.wins({ kind: 'jokereq', a: 0, jok: false }, 0), true);
-  assert.equal(sim.wins({ kind: 'jokereq', a: 0, jok: false }, 5), false);
+  assert.equal(sim.wins({ kind: 'jokerfree', a: 0, jok: false }, 5), true);  // neben Joker: alles richtig
+  assert.equal(sim.wins({ kind: 'jokerfree', a: 0, jok: false }, 14), true);
+  assert.equal(sim.wins({ kind: 'jokerfree', a: 0, jok: false }, 0), false); // außer ein Joker
 });
 
 test('pick: Sperrregel meidet Felder neben einem offenen Joker', () => {
@@ -86,5 +89,12 @@ test('pick: Sperre entfällt, wenn es keine andere Stelle gibt', () => {
   const st = makeState({ jokers: 2, open: { 0: 0 } });
   const res = sim.pick(st, true);
   assert.ok([1, 5].includes(res.cell));
-  assert.equal(res.kind, 'jokereq');
+  assert.equal(res.kind, 'jokerfree');
+});
+
+test('pick: ohne Sperre nimmt der Spieler das leichte Feld neben dem Joker', () => {
+  const st = makeState({ jokers: 2, open: { 0: 0, 4: 5, 20: 5, 24: 5 } });
+  const res = sim.pick(st, false);
+  assert.ok([1, 5].includes(res.cell));
+  assert.equal(res.kind, 'jokerfree');
 });

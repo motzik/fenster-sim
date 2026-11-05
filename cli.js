@@ -6,6 +6,8 @@
 //   node cli.js --blatt 2 --n 50000      2 Blätter, 50.000 Spiele
 //   node cli.js --joker 4                nur Fall 2 mit 4 Jokern
 //   node cli.js --json                   Ausgabe als JSON
+//   node cli.js --schwelle 70            nach den Pflichtkarten weiter ab 70 % Trefferchance (Standard 80)
+//   node cli.js --schwelle aus           nach den Pflichtkarten immer sofort weitergeben
 //
 // Die Arbeit wird in feste Blöcke geteilt (Seed pro Block: seed + i * 1000003).
 // Das Ergebnis hängt deshalb nicht von der Anzahl der Threads ab.
@@ -21,7 +23,7 @@ if (!isMainThread) {
 }
 
 function parseArgs(argv) {
-  const o = { modus: 'spiel', blatt: 1, joker: null, n: null, seed: 2026, threads: os.availableParallelism ? os.availableParallelism() : os.cpus().length, json: false };
+  const o = { modus: 'spiel', blatt: 1, joker: null, n: null, seed: 2026, threads: os.availableParallelism ? os.availableParallelism() : os.cpus().length, json: false, schwelle: '80' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--json') o.json = true;
@@ -33,16 +35,21 @@ function parseArgs(argv) {
   o.threads = Math.max(1, parseInt(o.threads, 10));
   if (o.modus !== 'spiel' && o.modus !== 'zug') throw new Error('--modus muss spiel oder zug sein');
   if (![1, 2].includes(o.blatt)) throw new Error('--blatt muss 1 oder 2 sein');
+  if (o.schwelle === 'aus') o.threshold = null;
+  else {
+    o.threshold = parseFloat(o.schwelle) / 100;
+    if (!(o.threshold >= 0 && o.threshold <= 1)) throw new Error('--schwelle muss zwischen 0 und 100 liegen oder aus sein');
+  }
   o.n = o.n === null ? (o.modus === 'spiel' ? 20000 : 1000000) : parseInt(o.n, 10);
   return o;
 }
 
-function runParallel({ mode, decks, jokers, total, seed, threads }) {
+function runParallel({ mode, decks, jokers, total, seed, threads, threshold }) {
   const chunk = mode === 'game' ? 500 : 25000;
   const jobs = [];
   for (let i = 0; i * chunk < total; i++) {
     const n = Math.min(chunk, total - i * chunk);
-    jobs.push({ id: i, mode, decks, jokers, seed: (seed + i * 1000003) >>> 0, trials: n, games: n });
+    jobs.push({ id: i, mode, decks, jokers, threshold, seed: (seed + i * 1000003) >>> 0, trials: n, games: n });
   }
   const results = new Array(jobs.length);
   let next = 0, done = 0;
@@ -87,6 +94,7 @@ function summarizeGames(s) {
     zuegeMedian: quantile(s.hist, n, 0.5), zuege90: quantile(s.hist, n, 0.9),
     zuegeUeber: s.hist[top] ? `${s.hist[top]} Spiele mit ${top} oder mehr Zügen` : null,
     fehlversucheMittel: s.fails / n, schluckeMittel: s.sips / n, neuAufgelegtMittel: s.relaid / n,
+    zusatzMittel: s.extraTries / n, zusatzJokerMittel: s.extraJoker / n, zusatzTrefferquote: s.extraTries ? s.extraHits / s.extraTries : 0, verteiltMittel: s.given / n,
     mitteFehlerMittel: s.midFails / n, neuGemischtMittel: s.reshuffles / n,
     sperreAnteil: s.mand ? s.changed / s.mand : 0, sperreVerlust: s.changed ? s.loss / s.changed : 0,
   };
@@ -106,11 +114,11 @@ const pct = (x, d = 2) => num(x * 100, d) + ' %';
 
 function printTable(rows, mode) {
   const head = mode === 'game'
-    ? ['Fall', 'Joker', 'Spiele', 'Ø Züge', '± 95 %', 'Median', '90 %', 'Ø Fehler', 'Ø Schlucke §7', 'Sperre greift']
+    ? ['Fall', 'Joker', 'Spiele', 'Ø Züge', '± 95 %', 'Median', '90 %', 'Ø Fehler', 'Ø getrunken §7', 'Ø Zusatz', 'davon Joker', 'Ø verteilt §6', 'Sperre greift']
     : ['Fall', 'Joker', 'Züge', '3 Pflichtkarten', '± 95 %', 'Karte 1/2/3/4', 'Sperre greift'];
   const body = rows.map(({ fall, jokers, r }) => mode === 'game'
     ? [fall, jokers, r.spiele.toLocaleString('de-AT'), num(r.zuegeMittel), num(r.zuegeCI95), r.zuegeMedian, r.zuege90,
-      num(r.fehlversucheMittel), num(r.schluckeMittel, 0), jokers ? pct(r.sperreAnteil) : '–']
+      num(r.fehlversucheMittel), num(r.schluckeMittel, 0), num(r.zusatzMittel), jokers ? num(r.zusatzJokerMittel) : '–', num(r.verteiltMittel), jokers ? pct(r.sperreAnteil) : '–']
     : [fall, jokers, r.zuege.toLocaleString('de-AT'), pct(r.dreiPflicht), num(r.dreiPflichtCI95 * 100, 2),
       r.trefferquote.map((x) => num(x * 100)).join(' / '), jokers ? pct(r.sperreAnteil) : '–']);
   const all = [head, ...body].map((r) => r.map(String));
@@ -132,15 +140,15 @@ async function main() {
   const rows = [];
   for (const c of cases) {
     const t0 = Date.now();
-    const stats = await runParallel({ mode, decks: o.blatt, jokers: c.jokers, total: o.n, seed: o.seed, threads: o.threads });
+    const stats = await runParallel({ mode, decks: o.blatt, jokers: c.jokers, total: o.n, seed: o.seed, threads: o.threads, threshold: o.threshold });
     const r = mode === 'game' ? summarizeGames(stats) : summarizeTurns(stats);
     rows.push({ ...c, r, sekunden: (Date.now() - t0) / 1000 });
   }
   if (o.json) {
-    console.log(JSON.stringify({ modus: o.modus, blatt: o.blatt, seed: o.seed, faelle: rows }, null, 2));
+    console.log(JSON.stringify({ modus: o.modus, blatt: o.blatt, seed: o.seed, schwelle: o.threshold, faelle: rows }, null, 2));
     return;
   }
-  console.log(`\nFenster aufmachen · ${o.modus === 'spiel' ? 'ganze Spiele' : 'einzelne Züge'} · ${o.blatt * 52} Karten · Seed ${o.seed} · ${o.threads} Threads\n`);
+  console.log(`\nFenster aufmachen · ${o.modus === 'spiel' ? 'ganze Spiele' : 'einzelne Züge'} · ${o.blatt * 52} Karten · Schwelle ${o.threshold === null ? 'aus' : Math.round(o.threshold * 100) + ' %'} · Seed ${o.seed} · ${o.threads} Threads\n`);
   printTable(rows, mode);
   rows.forEach((x) => { if (x.r.zuegeUeber) console.log(`\nHinweis (${x.fall}): ${x.r.zuegeUeber}.`); });
   console.log(`\nRechenzeit: ${rows.map((x) => num(x.sekunden) + ' s').join(', ')}`);

@@ -46,7 +46,9 @@ for (const [decks, jokers] of [[1, 0], [1, 2], [2, 6]]) {
     for (let i = 0; i < 4; i++) {
       const observed = st.hits[i] / st.attempts[i];
       const predicted = st.sumP[i] / st.attempts[i];
-      assert.ok(Math.abs(observed - predicted) < 0.003,
+      // Grenze: 4 Standardfehler. Eine feste Grenze schlägt bei Zufallsausreißern an.
+      const se = Math.sqrt(observed * (1 - observed) / st.attempts[i]);
+      assert.ok(Math.abs(observed - predicted) < 4 * se,
         `Karte ${i + 1}: ${(observed * 100).toFixed(2)} % beobachtet, ${(predicted * 100).toFixed(2)} % berechnet`);
     }
     if (jokers === 0) assert.equal(st.changed, 0, 'ohne Joker darf die Sperre nie greifen');
