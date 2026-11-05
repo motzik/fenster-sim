@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="de-AT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fenster-Simulator</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: Einstellungen, dann Ergebnis (während des Laufs: Live-Fenster), Verlauf, Code, Annahmen. */
+  :root {
+    --bg: #f1f4f2;
+    --surface: #ffffff;
+    --ink: #14211b;
+    --ink2: #46564e;
+    --muted: #6b7b73;
+    --line: #d6ded9;
+    --code-bg: #101a24;
+    --code-ink: #d6e2ee;
+    --c0: #2a78d6;   /* ohne Joker */
+    --c1: #eb6834;   /* mit Jokern */
+    --s3: #1baf7a;
+    --bad: #d03b3b;
+    --bad-bg: #fbe7e5;
+    --back1: #2a5fa8;
+    --back2: #3b74c2;
+    --f-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --f-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1613; --surface: #16211c; --ink: #eaf1ed; --ink2: #b4c3bb; --muted: #8a9a92;
+      --line: #28382f; --code-bg: #0a1017; --code-ink: #cddae7;
+      --c0: #4a93ea; --c1: #f07a45; --s3: #22b884; --bad: #ef5d55; --bad-bg: #3a1c1a;
+      --back1: #1f4a85; --back2: #2b5d9f;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1613; --surface: #16211c; --ink: #eaf1ed; --ink2: #b4c3bb; --muted: #8a9a92;
+    --line: #28382f; --code-bg: #0a1017; --code-ink: #cddae7;
+    --c0: #4a93ea; --c1: #f07a45; --s3: #22b884; --bad: #ef5d55; --bad-bg: #3a1c1a;
+    --back1: #1f4a85; --back2: #2b5d9f;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16px;
+    line-height: 1.55;
+    padding-block: 32px 56px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 36px; }
+  section { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(2.1rem, 6.5vw, 3.3rem); line-height: 1.04; margin: 6px 0 12px; letter-spacing: -.02em; }
+  h2 { font-family: var(--f-display); font-weight: 600; font-size: 1.4rem; line-height: 1.2; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+  p { margin: 0; max-width: 65ch; }
+  .lead { font-size: 1.1rem; max-width: 60ch; }
+  .sub { color: var(--ink2); }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 16px 20px; }
+  .ctl { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .ctl > label, .ctl > .cl { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .ctl.wide { grid-column: 1 / -1; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; align-self: flex-start; max-width: 100%; flex-wrap: wrap; background: var(--bg); }
+  .seg button { font: inherit; font-size: 14px; font-weight: 500; padding: 9px 14px; border: 0; background: transparent; color: var(--ink2); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .seg button:disabled { opacity: .5; cursor: not-allowed; }
+  select, input[type="number"] { font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); width: 100%; max-width: 220px; font-variant-numeric: tabular-nums; }
+  select:focus-visible, input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--c0); outline-offset: 2px; }
+  .hint { font-size: 13px; color: var(--muted); }
+  .runrow { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; }
+  .go { font: inherit; font-size: 15px; font-weight: 600; padding: 10px 20px; border-radius: 8px; border: 0; background: var(--c0); color: #fff; cursor: pointer; }
+  .go.stop { background: var(--ink); color: var(--bg); }
+  .prog { flex: 1 1 160px; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; border: 1px solid var(--line); min-width: 120px; }
+  .prog i { display: block; height: 100%; width: 0; background: var(--s3); transition: width .15s; }
+  #status { font-size: 14px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+
+  /* Live-Fenster: nur während des Laufs, als Ladebildschirm */
+  .livebox { align-items: center; padding-block: 28px; }
+  .board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: min(100%, 300px); }
+  .cell { aspect-ratio: 5 / 7; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    font-family: var(--f-display); font-weight: 700; font-size: clamp(15px, 4.6vw, 21px); font-variant-numeric: tabular-nums;
+    border: 1px solid transparent; transition: background-color .18s, transform .18s, opacity .18s, box-shadow .12s; }
+  .cell.hole { visibility: hidden; }
+  .cell.back { background: repeating-linear-gradient(45deg, var(--back1) 0 5px, var(--back2) 5px 10px); border-color: var(--back1); }
+  .cell.back.mid { box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 5px var(--back1); }
+  .cell.face { background: var(--bg); border-color: var(--line); color: var(--ink); }
+  .cell.face.joker { color: var(--c1); font-size: clamp(10px, 2.8vw, 13px); letter-spacing: .02em; }
+  .cell.hit { box-shadow: 0 0 0 3px var(--s3); transform: translateY(-2px); }
+  .cell.miss { box-shadow: 0 0 0 3px var(--bad); background: var(--bad-bg); color: var(--bad); }
+  .cell.gone { opacity: .2; transform: scale(.86); }
+  .livecap { font-size: 14px; color: var(--ink2); font-variant-numeric: tabular-nums; text-align: center; }
+  .livecap b { color: var(--ink); }
+
+  /* Vergleich */
+  .verdict { font-family: var(--f-display); font-weight: 700; font-size: clamp(1.35rem, 4vw, 1.8rem); line-height: 1.2; letter-spacing: -.01em; max-width: 34ch; text-wrap: balance; }
+  .verdict em { font-style: normal; color: var(--c1); }
+  .duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+  .kcard { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; background: var(--bg); display: flex; flex-direction: column; gap: 2px; border-top: 4px solid var(--c); }
+  .kcard .k { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .kcard .big { font-family: var(--f-display); font-weight: 700; font-size: clamp(2.2rem, 7vw, 3rem); line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .kcard .s { font-size: 13px; color: var(--ink2); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink2); }
+  .legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--c); margin-right: 6px; vertical-align: -1px; }
+  .chart-title { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .row { display: grid; grid-template-columns: 6.6rem 1fr 4rem; gap: 12px; align-items: center; }
+  .row .lab { font-size: 14px; color: var(--ink2); line-height: 1.2; }
+  .row .lab small { display: block; font-size: 12px; color: var(--muted); }
+  .row .val { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; line-height: 1.35; }
+  .row .val i { display: block; font-style: normal; }
+  .plot { position: relative; height: 30px; }
+  .bar { position: absolute; left: 0; height: 10px; border-radius: 0 3px 3px 0; background: var(--c); transition: width .2s; }
+  .bar.a { top: 4px; } .bar.b { top: 16px; }
+  .note { font-size: 14px; color: var(--ink2); }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; min-width: 480px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 14px; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+  td.n, th.n { text-align: right; }
+  th.c0 { color: var(--c0); } th.c1 { color: var(--c1); }
+
+  .codebar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .btn { font: inherit; font-size: 14px; font-weight: 500; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+  #cmsg { font-size: 13px; color: var(--ink2); }
+  pre.code { margin: 0; background: var(--code-bg); color: var(--code-ink); border-radius: 10px; padding: 16px; overflow: auto; max-height: 70vh; font: 12.5px/1.55 var(--f-mono); tab-size: 2; }
+
+  ul.assume { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; color: var(--ink2); max-width: 65ch; }
+  ul.assume b { color: var(--ink); font-weight: 600; }
+
+  @media (max-width: 520px) {
+    .row { grid-template-columns: 5.4rem 1fr 3.6rem; gap: 8px; }
+    .panel { padding: 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .bar, .prog i, .cell { transition: none; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Fenster aufmachen · Simulator</div>
+    <h1>Fenster-Simulator</h1>
+    <p class="lead">Macht die Jokerregel das Spiel leichter oder schwerer? Jeder Lauf spielt dieselben Fenster einmal ohne Joker und einmal mit Jokern und Sperrregel und vergleicht beides.</p>
+  </header>
+
+  <section>
+    <h2>Einstellungen</h2>
+    <div class="panel">
+      <div class="controls">
+        <div class="ctl wide">
+          <span class="cl" id="l-mode">Was wird simuliert</span>
+          <div class="seg" role="group" aria-labelledby="l-mode">
+            <button type="button" data-mode="game" aria-pressed="true">Ganze Spiele</button>
+            <button type="button" data-mode="turn" aria-pressed="false">Einzelne Züge</button>
+          </div>
+          <span class="hint" id="modehint"></span>
+        </div>
+        <div class="ctl">
+          <span class="cl" id="l-deck">Blatt</span>
+          <div class="seg" role="group" aria-labelledby="l-deck">
+            <button type="button" data-deck="1" aria-pressed="true">1 Blatt · 52</button>
+            <button type="button" data-deck="2" aria-pressed="false">2 Blätter · 104</button>
+          </div>
+        </div>
+        <div class="ctl">
+          <label for="jok">Joker im Vergleichsfall</label>
+          <input id="jok" type="number" min="1" max="12" step="1" value="2">
+        </div>
+        <div class="ctl">
+          <label for="trials" id="trialslab">Spiele pro Fall</label>
+          <select id="trials"></select>
+        </div>
+        <div class="ctl">
+          <label for="seed">Seed</label>
+          <input id="seed" type="number" min="0" step="1" value="2026">
+        </div>
+      </div>
+      <p class="hint">Gerechnet werden immer beide Fälle mit denselben Seeds: Joker vor dem Spiel aussortiert, und mit Jokern und Sperrregel.</p>
+      <div class="runrow">
+        <button type="button" class="go" id="go">Simulation starten</button>
+        <div class="prog" aria-hidden="true"><i id="progfill"></i></div>
+        <span id="status" role="status" aria-live="polite"></span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ergebnis</h2>
+
+    <div class="panel livebox" id="livebox" hidden>
+      <div class="board" id="board" aria-hidden="true"></div>
+      <div class="livecap" id="livecap">Rechnet …</div>
+    </div>
+
+    <div class="panel" id="resultbox">
+      <p class="verdict" id="verdict">Noch kein Ergebnis.</p>
+      <div class="duo" id="duo"></div>
+      <div>
+        <div class="chart-title" id="charttitle"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div id="rows"></div>
+      <p class="note" id="rowsnote"></p>
+      <div class="tablewrap">
+        <table>
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Bisherige Läufe</h2>
+    <div class="panel">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Modus</th><th class="n">Karten</th><th class="n">Joker</th><th class="n">Anzahl</th><th class="n c0">Ohne Joker</th><th class="n c1">Mit Jokern</th><th class="n">Unterschied</th></tr></thead>
+          <tbody id="hist"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Simulationscode</h2>
+    <p class="sub">Das ist genau der Code, der oben in den Web Workern läuft.</p>
+    <div class="codebar">
+      <button type="button" class="btn" id="toggle" aria-expanded="false">Code anzeigen</button>
+      <button type="button" class="btn" id="copy">Code kopieren</button>
+      <span id="cmsg" role="status"></span>
+    </div>
+    <pre class="code" id="code" hidden></pre>
+  </section>
+
+  <section>
+    <h2>Annahmen</h2>
+    <ul class="assume">
+      <li><b>Ass</b> zählt hoch. <b>Nachbarn</b> sind nur Karten oberhalb, unterhalb, links und rechts.</li>
+      <li><b>Gleichstand</b> mit einer Grenzkarte verliert bei „Dazwischen“ und „Nicht dazwischen“.</li>
+      <li><b>Joker</b> sind immer richtig, außer ein offener Joker liegt daneben. Dann zählt nur „Gleich“. Ein offener Joker dient nie als Referenzkarte. Auf der Mitte gewinnt ein Joker immer.</li>
+      <li><b>Sperrregel</b> in den Pflichtkarten: Felder neben einem offenen Joker sind gesperrt, solange es ein anderes Feld gibt.</li>
+      <li><b>Fehler (§ 7)</b>: Die falsche Karte und alle offenen Karten, die mit ihr zusammenhängen, kommen weg, Ecken eingeschlossen. Ecken werden neu offen aufgelegt, alles andere verdeckt. Geschluckt wird pro offener Karte im Zusammenhang.</li>
+      <li><b>Stapel leer</b>: Die entfernten Karten werden gemischt und bilden den neuen Stapel.</li>
+      <li><b>Pflichtkarten</b>: Nach drei Treffern gibt der Spieler weiter. Sind weniger als drei Karten verdeckt, gilt die Pflicht nur für diese.</li>
+      <li><b>Mitte</b>: Rot oder Schwarz, 50 : 50.</li>
+      <li><b>Spieler</b> kennen alle offenen Karten, zählen aber keine Karten mit. Unbekannt ist für sie alles, was nicht offen im Fenster liegt.</li>
+      <li><b>Einzelne Züge</b>: Von den vier Ecken aus werden zufällig 0 bis 12 weitere Karten aufgedeckt, dann wird ein Zug gespielt.</li>
+    </ul>
+  </section>
+</div>
+
+<script type="text/plain" id="sim-src">
+// ===== Fenster aufmachen: Simulation =====
+// Zwei Fälle:
+//   Fall 1: Joker werden vor dem Spiel aussortiert  (jokers = 0, Sperrregel hat nichts zu tun)
+//   Fall 2: Es wird mit Jokern gespielt, Sperrregel immer aktiv (jokers >= 1)
+//
+// Modell eines Zuges mit perfektem Spieler:
+//   - Der Spieler kennt alle offenen Karten und weiß, welche Karten noch unbekannt sind.
+//   - Er wählt jedes Mal die verdeckte Karte und die Wette mit der höchsten Trefferchance.
+//   - Karte 1 bis 3 sind Pflicht, dort gilt die Sperrregel:
+//       Felder neben einem offenen Joker sind gesperrt, solange es ein anderes Feld gibt.
+//   - Karte 4 ist freiwillig weitergespielt (keine Sperre).
+//   - Beim ersten Fehler endet der Zug.
+
+// Felder sind Indizes 0..24 (Zeile * 5 + Spalte). Wert 0 steht für einen Joker, 2..14 für die Ränge (Ass = 14).
+var HOLES = [6, 8, 16, 18];
+var CORNERS = [0, 4, 20, 24];
+var MID = 12;
+var CELLS = [];
+var NEIGHBORS = {};
+(function () {
+  var i;
+  for (i = 0; i < 25; i++) if (HOLES.indexOf(i) < 0) CELLS.push(i);
+  var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  CELLS.forEach(function (cell) {
+    var r = Math.floor(cell / 5), c = cell % 5, list = [];
+    dirs.forEach(function (d) {
+      var rr = r + d[0], cc = c + d[1];
+      if (rr < 0 || rr > 4 || cc < 0 || cc > 4) return;
+      var j = rr * 5 + cc;
+      if (HOLES.indexOf(j) < 0) list.push(j);
+    });
+    NEIGHBORS[cell] = list;
+  });
+})();
+
+// Zufallszahlen (mulberry32), damit ein Seed immer dasselbe Ergebnis liefert.
+function makeRng(seed) {
+  var a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function sumRange(counts, lo, hi) {
+  var s = 0;
+  if (lo < 2) lo = 2;
+  if (hi > 14) hi = 14;
+  for (var r = lo; r <= hi; r++) s += counts[r];
+  return s;
+}
+
+// Beste Wette für ein verdecktes Feld. Referenzkarten sind die offenen Nachbarn.
+// Ein offener Joker ist keine Referenz. Liegt ein Joker daneben, gewinnt ein verdeckter Joker nur bei "Gleich".
+function bestBet(cell, st) {
+  var nb = NEIGHBORS[cell], vals = [], jokerNb = false, i, v;
+  for (i = 0; i < nb.length; i++) {
+    if (!st.revealed[nb[i]]) continue;
+    v = st.value[nb[i]];
+    if (v === 0) jokerNb = true;
+    else if (vals.indexOf(v) < 0) vals.push(v);
+  }
+  vals.sort(function (x, y) { return x - y; });
+  var c = st.counts, N = st.N;
+  var jb = jokerNb ? 0 : c[0] / N;
+  var best = jokerNb
+    ? { p: c[0] / N, kind: 'jokereq', a: 0, b: 0, jok: false }
+    : { p: -1, kind: 'none', a: 0, b: 0, jok: true };
+  var p, j;
+  for (i = 0; i < vals.length; i++) {
+    v = vals[i];
+    p = sumRange(c, v + 1, 14) / N + jb; if (p > best.p) best = { p: p, kind: 'gt', a: v, b: 0, jok: !jokerNb };
+    p = sumRange(c, 2, v - 1) / N + jb;  if (p > best.p) best = { p: p, kind: 'lt', a: v, b: 0, jok: !jokerNb };
+    p = c[v] / N + jb;                   if (p > best.p) best = { p: p, kind: 'eq', a: v, b: 0, jok: !jokerNb };
+    for (j = i + 1; j < vals.length; j++) {
+      p = sumRange(c, vals[i] + 1, vals[j] - 1) / N + jb;
+      if (p > best.p) best = { p: p, kind: 'between', a: vals[i], b: vals[j], jok: !jokerNb };
+      p = (sumRange(c, 2, vals[i] - 1) + sumRange(c, vals[j] + 1, 14)) / N + jb;
+      if (p > best.p) best = { p: p, kind: 'outside', a: vals[i], b: vals[j], jok: !jokerNb };
+    }
+  }
+  return best;
+}
+
+// Gewinnt die Wette mit der tatsächlich darunter liegenden Karte v?
+function wins(bet, v) {
+  if (v === 0) return bet.kind === 'jokereq' || bet.jok;
+  switch (bet.kind) {
+    case 'gt': return v > bet.a;
+    case 'lt': return v < bet.a;
+    case 'eq': return v === bet.a;
+    case 'between': return v > bet.a && v < bet.b;
+    case 'outside': return v < bet.a || v > bet.b;
+    default: return false;
+  }
+}
+
+// Wählt Feld und Wette. Mit restricted = true gilt die Sperrregel.
+function pick(st, restricted) {
+  var cand = [], i, k, cell, nb, adj, near, cellNear = {};
+  for (i = 0; i < CELLS.length; i++) {
+    cell = CELLS[i];
+    if (st.revealed[cell] || cell === MID) continue;
+    nb = NEIGHBORS[cell]; adj = false; near = false;
+    for (k = 0; k < nb.length; k++) {
+      if (st.revealed[nb[k]]) { adj = true; if (st.value[nb[k]] === 0) near = true; }
+    }
+    if (adj) { cand.push(cell); cellNear[cell] = near; }
+  }
+  if (restricted) {
+    var ok = cand.filter(function (x) { return !cellNear[x]; });
+    if (ok.length) cand = ok;
+  }
+  if (!cand.length) return null;
+  var best = null, bet, bc = -1;
+  for (i = 0; i < cand.length; i++) {
+    bet = bestBet(cand[i], st);
+    if (!best || bet.p > best.p) { best = bet; bc = cand[i]; }
+  }
+  best.cell = bc;
+  return best;
+}
+
+function reveal(st, cell) {
+  st.revealed[cell] = 1;
+  st.counts[st.value[cell]]--;
+  st.N--;
+}
+
+function emptyStats() {
+  return { turns: 0, attempts: [0, 0, 0, 0], hits: [0, 0, 0, 0], sumP: [0, 0, 0, 0], pass3: 0, mand: 0, changed: 0, loss: 0 };
+}
+
+function mergeStats(a, b) {
+  var out = emptyStats(), i;
+  ['turns', 'pass3', 'mand', 'changed', 'loss'].forEach(function (k) { out[k] = a[k] + b[k]; });
+  for (i = 0; i < 4; i++) {
+    out.attempts[i] = a.attempts[i] + b.attempts[i];
+    out.hits[i] = a.hits[i] + b.hits[i];
+    out.sumP[i] = a.sumP[i] + b.sumP[i];
+  }
+  return out;
+}
+
+// Ein Zug ab dem aktuellen Spielstand.
+function playTurn(st, stats) {
+  var pos, free, chosen, res, hit;
+  if (!pick(st, false)) return;
+  stats.turns++;
+  for (pos = 0; pos < 4; pos++) {
+    free = pick(st, false);
+    if (!free) return;
+    chosen = free;
+    if (pos < 3) {
+      res = pick(st, true);
+      stats.mand++;
+      if (free.p - res.p > 1e-9) { stats.changed++; stats.loss += free.p - res.p; }
+      chosen = res;
+    }
+    hit = wins(chosen, st.value[chosen.cell]);
+    stats.attempts[pos]++;
+    stats.sumP[pos] += chosen.p;
+    if (!hit) return;
+    stats.hits[pos]++;
+    if (pos === 2) stats.pass3++;
+    reveal(st, chosen.cell);
+  }
+}
+
+// cfg: { decks, jokers, trials, seed, kMax }
+// kMax: so viele Karten werden vor dem Zug zufällig zusätzlich aufgedeckt (0 bis kMax, gleich verteilt).
+function runBatch(cfg) {
+  var decks = cfg.decks, jokers = cfg.jokers, trials = cfg.trials;
+  var kMax = cfg.kMax === undefined ? 12 : cfg.kMax;
+  var rng = makeRng(cfg.seed);
+  var deck = [], d, r, i, t;
+  for (d = 0; d < decks; d++) for (r = 2; r <= 14; r++) for (i = 0; i < 4; i++) deck.push(r);
+  for (i = 0; i < jokers; i++) deck.push(0);
+  var base = new Int16Array(15);
+  for (i = 0; i < deck.length; i++) base[deck[i]]++;
+  var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: 0 };
+  var stats = emptyStats();
+  for (t = 0; t < trials; t++) {
+    // Die 21 Fensterkarten ziehen (Teil-Mischen reicht).
+    for (i = 0; i < CELLS.length; i++) {
+      var j = i + Math.floor(rng() * (deck.length - i));
+      var tmp = deck[i]; deck[i] = deck[j]; deck[j] = tmp;
+      st.value[CELLS[i]] = deck[i];
+    }
+    st.revealed.fill(0);
+    st.counts.set(base);
+    st.N = deck.length;
+    for (i = 0; i < CORNERS.length; i++) reveal(st, CORNERS[i]);
+    // Zufälliger Spielfortschritt: Karten aufdecken, immer an eine offene Karte angrenzend.
+    var k = Math.floor(rng() * (kMax + 1));
+    while (k-- > 0) {
+      var front = [], c, n, q;
+      for (c = 0; c < CELLS.length; c++) {
+        var cell = CELLS[c];
+        if (st.revealed[cell] || cell === MID) continue;
+        n = NEIGHBORS[cell];
+        for (q = 0; q < n.length; q++) if (st.revealed[n[q]]) { front.push(cell); break; }
+      }
+      if (front.length <= 1) break;
+      reveal(st, front[Math.floor(rng() * front.length)]);
+    }
+    playTurn(st, stats);
+  }
+  return stats;
+}
+
+// ===== Ganze Spiele =====
+// Ein Fenster wird von Anfang bis Ende gespielt. Regeln, mit dem Autor geklärt:
+//   § 7  Bei einem Fehler werden die falsche Karte und alle offenen Karten entfernt, die über
+//        offene Nachbarn mit ihr zusammenhängen, Ecken eingeschlossen. Geschluckt wird für jede
+//        offene Karte in diesem Zusammenhang (die falsche Karte selbst zählt nicht).
+//        Die Felder werden aus dem Stapel neu belegt: Ecken offen, alle anderen verdeckt.
+//        Danach beginnt derselbe Spieler seinen Zug erneut.
+//   Stapel leer: Die entfernten Karten werden gemischt und bilden den neuen Stapel.
+//   Weniger als drei verdeckte Karten: Pflicht sind nur noch die verdeckten Karten.
+//   Mitte: Rot oder Schwarz, 50 : 50. Ein Joker gewinnt immer.
+//   Strategie: Nach den Pflichtkarten gibt der Spieler sofort weiter.
+// Der Spieler zählt keine Karten mit: Unbekannt ist für ihn alles, was nicht offen im Fenster liegt.
+var GAME_BINS = 2000; // Histogramm der Züge pro Spiel, das letzte Fach sammelt alles darüber
+
+function isCorner(cell) { return cell === 0 || cell === 4 || cell === 20 || cell === 24; }
+
+// Alle offenen Karten, die über offene Nachbarn mit dem Feld start zusammenhängen, plus start selbst.
+function component(st, start) {
+  var seen = {}, list = [start], i, k, nb;
+  seen[start] = 1;
+  for (i = 0; i < list.length; i++) {
+    nb = NEIGHBORS[list[i]];
+    for (k = 0; k < nb.length; k++) {
+      if (st.revealed[nb[k]] && !seen[nb[k]]) { seen[nb[k]] = 1; list.push(nb[k]); }
+    }
+  }
+  return list;
+}
+
+function shuffle(arr, rng) {
+  for (var i = arr.length - 1; i > 0; i--) {
+    var j = Math.floor(rng() * (i + 1)), t = arr[i];
+    arr[i] = arr[j]; arr[j] = t;
+  }
+}
+
+// Eine Karte vom Stapel. Ist er leer, werden die entfernten Karten gemischt.
+function draw(g, rng) {
+  if (!g.stack.length) { g.stack = g.disc; g.disc = []; shuffle(g.stack, rng); g.reshuffles++; }
+  return g.stack.pop();
+}
+
+function emptyGameStats() {
+  var hist = [];
+  for (var i = 0; i <= GAME_BINS; i++) hist.push(0);
+  return { games: 0, aborted: 0, turns: 0, turns2: 0, attempts: 0, fails: 0, sips: 0, relaid: 0,
+    midTries: 0, midFails: 0, reshuffles: 0, mand: 0, changed: 0, loss: 0, hist: hist };
+}
+
+function mergeGameStats(a, b) {
+  var out = emptyGameStats(), k, i;
+  for (k in out) if (k !== 'hist') out[k] = a[k] + b[k];
+  for (i = 0; i <= GAME_BINS; i++) out.hist[i] = a.hist[i] + b.hist[i];
+  return out;
+}
+
+// Eine Pflichtkarte spielen. Liefert das Feld und ob die Vorhersage stimmte.
+function playCard(st, rng, stats) {
+  var free = pick(st, false);
+  if (!free) {
+    // Nur noch die Mitte ist verdeckt: Rot oder Schwarz.
+    stats.midTries++;
+    return { cell: MID, hit: st.value[MID] === 0 || rng() < 0.5, bet: { kind: 'color', p: 0.5, a: 0, b: 0 }, blocked: false };
+  }
+  var res = pick(st, true);
+  stats.mand++;
+  var blocked = free.p - res.p > 1e-9;
+  if (blocked) { stats.changed++; stats.loss += free.p - res.p; }
+  return { cell: res.cell, hit: wins(res, st.value[res.cell]), bet: res, blocked: blocked };
+}
+
+// Spielprotokoll für die Animation. Nur aktiv, wenn g.log ein Array ist.
+function logCells(st, cells) {
+  var out = [];
+  for (var i = 0; i < cells.length; i++) out.push([cells[i], st.value[cells[i]], st.revealed[cells[i]]]);
+  return out;
+}
+
+// § 7: falsche Karte und ihren offenen Zusammenhang entfernen und neu auflegen.
+function failAt(st, g, rng, stats, cell) {
+  var comp = component(st, cell), i, c;
+  stats.fails++;
+  stats.sips += comp.length - 1;
+  stats.relaid += comp.length;
+  if (cell === MID) stats.midFails++;
+  for (i = 0; i < comp.length; i++) {
+    c = comp[i];
+    if (st.revealed[c]) { st.revealed[c] = 0; st.counts[st.value[c]]++; st.N++; g.open--; }
+    g.disc.push(st.value[c]);
+  }
+  for (i = 0; i < comp.length; i++) {
+    c = comp[i];
+    st.value[c] = draw(g, rng);
+    if (isCorner(c)) { reveal(st, c); g.open++; }
+  }
+  if (g.log) g.log.push({ t: 'fail', cells: logCells(st, comp), sips: comp.length - 1 });
+}
+
+// Spielt ein Fenster zu Ende. Gibt die Anzahl der Züge zurück oder -1 bei Abbruch.
+function playGame(st, g, rng, stats, maxTurns, maxAttempts) {
+  var turns = 0, attempts = 0, hits, need, r;
+  while (turns < maxTurns) {
+    turns++;
+    hits = 0; need = Math.min(3, CELLS.length - g.open); attempts++;
+    if (g.log) g.log.push({ t: 'turn', n: turns });
+    while (hits < need) {
+      r = playCard(st, rng, stats);
+      if (g.log) g.log.push({ t: 'card', cell: r.cell, v: st.value[r.cell], hit: r.hit, kind: r.bet.kind, a: r.bet.a, b: r.bet.b, p: r.bet.p, blocked: r.blocked });
+      if (r.hit) {
+        reveal(st, r.cell); g.open++; hits++;
+        if (r.cell === MID) { if (g.log) g.log.push({ t: 'end', n: turns }); return turns; }
+      } else {
+        failAt(st, g, rng, stats, r.cell);
+        if (++attempts > maxAttempts) return -1;
+        hits = 0; need = Math.min(3, CELLS.length - g.open);
+      }
+    }
+  }
+  return -1;
+}
+
+// cfg: { decks, jokers, games, seed, maxTurns, maxAttempts }
+function runGames(cfg) {
+  var rng = makeRng(cfg.seed), maxTurns = cfg.maxTurns || 5000, maxAttempts = cfg.maxAttempts || 50000;
+  var deck = [], d, r, i, t, n;
+  for (d = 0; d < cfg.decks; d++) for (r = 2; r <= 14; r++) for (i = 0; i < 4; i++) deck.push(r);
+  for (i = 0; i < cfg.jokers; i++) deck.push(0);
+  var base = new Int16Array(15);
+  for (i = 0; i < deck.length; i++) base[deck[i]]++;
+  var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: 0 };
+  var stats = emptyGameStats();
+  for (t = 0; t < cfg.games; t++) {
+    var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0 };
+    shuffle(g.stack, rng);
+    st.revealed.fill(0);
+    st.counts.set(base);
+    st.N = deck.length;
+    for (i = 0; i < CELLS.length; i++) st.value[CELLS[i]] = draw(g, rng);
+    for (i = 0; i < CORNERS.length; i++) { reveal(st, CORNERS[i]); g.open++; }
+    n = playGame(st, g, rng, stats, maxTurns, maxAttempts);
+    stats.reshuffles += g.reshuffles;
+    if (n < 0) { stats.aborted++; continue; }
+    stats.games++;
+    stats.turns += n;
+    stats.turns2 += n * n;
+    stats.hist[Math.min(n, GAME_BINS)]++;
+  }
+  return stats;
+}
+
+// Ein einzelnes Spiel mit Protokoll, zum Anschauen. cfg: { decks, jokers, seed }
+// Ergebnis: { turns, log } mit den Ereignissen deal, turn, card, fail, end.
+function traceGame(cfg) {
+  var rng = makeRng(cfg.seed), deck = [], d, r, i;
+  for (d = 0; d < cfg.decks; d++) for (r = 2; r <= 14; r++) for (i = 0; i < 4; i++) deck.push(r);
+  for (i = 0; i < cfg.jokers; i++) deck.push(0);
+  var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: deck.length };
+  for (i = 0; i < deck.length; i++) st.counts[deck[i]]++;
+  var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, log: [] };
+  shuffle(g.stack, rng);
+  for (i = 0; i < CELLS.length; i++) st.value[CELLS[i]] = draw(g, rng);
+  for (i = 0; i < CORNERS.length; i++) { reveal(st, CORNERS[i]); g.open++; }
+  g.log.push({ t: 'deal', cells: logCells(st, CELLS) });
+  var n = playGame(st, g, rng, emptyGameStats(), cfg.maxTurns || 5000, cfg.maxAttempts || 50000);
+  return { turns: n, log: g.log };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    runBatch: runBatch, emptyStats: emptyStats, mergeStats: mergeStats,
+    runGames: runGames, traceGame: traceGame, emptyGameStats: emptyGameStats, mergeGameStats: mergeGameStats, GAME_BINS: GAME_BINS,
+    // Für Tests: Feldaufbau und Einzelschritte
+    HOLES: HOLES, CORNERS: CORNERS, MID: MID, CELLS: CELLS, NEIGHBORS: NEIGHBORS,
+    makeRng: makeRng, bestBet: bestBet, wins: wins, pick: pick, reveal: reveal, playTurn: playTurn,
+    component: component, failAt: failAt
+  };
+}
+if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof document === 'undefined') {
+  self.onmessage = function (e) {
+    var m = e.data.mode;
+    if (m === 'trace') postMessage({ id: e.data.id, trace: traceGame(e.data) });
+    else postMessage({ id: e.data.id, stats: m === 'game' ? runGames(e.data) : runBatch(e.data) });
+  };
+}
+</script>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var SRC = $('sim-src').textContent.replace(/^\s+|\s+$/g, '');
+  var HOLES = [6, 8, 16, 18], MID = 12;
+  var MODES = {
+    game: { chunk: 500, label: 'Spiele pro Fall', opts: [2000, 10000, 50000, 100000], def: 10000 },
+    turn: { chunk: 25000, label: 'Züge pro Fall', opts: [100000, 500000, 1000000, 5000000], def: 500000 }
+  };
+  var CASES = ['Ohne Joker', 'Mit Jokern und Sperre'];
+  var st = { mode: 'game', decks: 1, running: false, workers: [], url: null, history: [], t0: 0 };
+  var nf = function (n) { return Math.round(n).toLocaleString('de-AT'); };
+  var df = function (x, d) { return x.toLocaleString('de-AT', { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  var pf = function (x, d) { return df(x * 100, d); };
+  var sign = function (x, d) { return (x > 0 ? '+' : x < 0 ? '−' : '±') + df(Math.abs(x), d); };
+
+  // Zusammenführen für beide Statistikarten: Zahlen addieren, Listen feldweise addieren.
+  function merge(a, b) {
+    if (!a) return b;
+    var o = {}, k, i;
+    for (k in a) {
+      if (Array.isArray(a[k])) { o[k] = []; for (i = 0; i < a[k].length; i++) o[k].push(a[k][i] + b[k][i]); }
+      else o[k] = a[k] + b[k];
+    }
+    return o;
+  }
+
+  function setPressed(sel, attr, val) {
+    document.querySelectorAll(sel).forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute(attr) === String(val))); });
+  }
+  function uiMode() {
+    var m = MODES[st.mode];
+    setPressed('[data-mode]', 'data-mode', st.mode);
+    $('trialslab').textContent = m.label;
+    $('trials').innerHTML = m.opts.map(function (n) { return '<option value="' + n + '"' + (n === m.def ? ' selected' : '') + '>' + nf(n) + '</option>'; }).join('');
+    $('modehint').textContent = st.mode === 'game'
+      ? 'Jedes Fenster wird bis zur Mitte durchgespielt. Verglichen wird, wie viele Züge es braucht.'
+      : 'Ein Zug ab einem zufälligen Spielstand. Verglichen wird die Chance auf die drei Pflichtkarten.';
+  }
+  function uiRun() {
+    $('go').textContent = st.running ? 'Abbrechen' : 'Simulation starten';
+    $('go').classList.toggle('stop', st.running);
+    ['trials', 'seed', 'jok'].forEach(function (id) { $(id).disabled = st.running; });
+    document.querySelectorAll('[data-deck],[data-mode]').forEach(function (b) { b.disabled = st.running; });
+  }
+
+  // ----- Kennzahlen -----
+  function quantile(hist, total, q) {
+    var acc = 0;
+    for (var i = 0; i < hist.length; i++) { acc += hist[i]; if (acc >= q * total) return i; }
+    return hist.length - 1;
+  }
+  function sumGame(a) {
+    var n = a.games, mean = a.turns / n, sd = Math.sqrt(Math.max(0, a.turns2 / n - mean * mean));
+    return { n: n, mean: mean, ci: 1.96 * sd / Math.sqrt(n), med: quantile(a.hist, n, 0.5), q90: quantile(a.hist, n, 0.9),
+      fails: a.fails / n, sips: a.sips / n, relaid: a.relaid / n, share: a.mand ? a.changed / a.mand : 0 };
+  }
+  function sumTurn(a) {
+    var p = a.pass3 / a.turns;
+    return { n: a.turns, p: p, ci: 1.96 * Math.sqrt(p * (1 - p) / a.turns),
+      rates: a.hits.map(function (h, i) { return a.attempts[i] ? h / a.attempts[i] : 0; }), share: a.mand ? a.changed / a.mand : 0 };
+  }
+
+  function kcard(i, big, sub) {
+    return '<div class="kcard" style="--c:var(--c' + i + ')"><span class="k">' + CASES[i] + '</span><span class="big">' + big + '</span><span class="s">' + sub + '</span></div>';
+  }
+  function legend() {
+    $('legend').innerHTML = '<span style="--c:var(--c0)">' + CASES[0] + '</span><span style="--c:var(--c1)">' + CASES[1] + '</span>';
+  }
+  function barRow(lab, small, v0, v1, w0, w1, fmt) {
+    return '<div class="row"><span class="lab">' + lab + (small ? '<small>' + small + '</small>' : '') + '</span><div class="plot">' +
+      '<div class="bar a" style="--c:var(--c0);width:' + w0 + '%"></div><div class="bar b" style="--c:var(--c1);width:' + w1 + '%"></div></div>' +
+      '<span class="val"><i style="color:var(--c0)">' + fmt(v0) + '</i><i style="color:var(--c1)">' + fmt(v1) + '</i></span></div>';
+  }
+  function table(rows) {
+    $('thead').innerHTML = '<tr><th>Kennzahl</th><th class="n c0">' + CASES[0] + '</th><th class="n c1">' + CASES[1] + '</th><th class="n">Unterschied</th></tr>';
+    $('tbody').innerHTML = rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td class="n">' + r[1] + '</td><td class="n">' + r[2] + '</td><td class="n">' + r[3] + '</td></tr>'; }).join('');
+  }
+
+  // ----- Ergebnis: ganze Spiele -----
+  function renderGames(A, cfg) {
+    var s0 = sumGame(A[0]), s1 = sumGame(A[1]);
+    var diff = s1.mean - s0.mean, rel = diff / s0.mean, noise = Math.sqrt(s0.ci * s0.ci + s1.ci * s1.ci);
+    $('verdict').innerHTML = Math.abs(diff) <= noise
+      ? 'Kein klarer Unterschied: Mit und ohne Joker dauert ein Fenster etwa gleich lang.'
+      : 'Mit Jokern dauert ein Fenster im Schnitt <em>' + nf(Math.abs(diff)) + ' Züge ' + (diff > 0 ? 'länger' : 'kürzer') + '</em> (' + sign(rel * 100, 0) + ' %).';
+    $('duo').innerHTML = kcard(0, df(s0.mean, 1), 'Ø Züge bis das Fenster zu ist, ± ' + df(s0.ci, 1)) +
+      kcard(1, df(s1.mean, 1), 'Ø Züge bis das Fenster zu ist, ± ' + df(s1.ci, 1) + '. Sperre greift bei ' + pf(s1.share, 1) + ' % der Pflichtkarten.');
+    // Verteilung in Stufen zu 50 Zügen, alles über 400 in einer Stufe.
+    var STEP = 50, NB = 9, b0 = [], b1 = [], i, k, max = 0;
+    for (i = 0; i < NB; i++) { b0.push(0); b1.push(0); }
+    for (k = 1; k < A[0].hist.length; k++) {
+      var j = Math.min(Math.floor((k - 1) / STEP), NB - 1);
+      b0[j] += A[0].hist[k] / s0.n; b1[j] += A[1].hist[k] / s1.n;
+    }
+    for (i = 0; i < NB; i++) max = Math.max(max, b0[i], b1[i]);
+    $('charttitle').textContent = 'Wie viele Züge ein Fenster dauert';
+    legend();
+    var rows = '', fmt = function (x) { return pf(x, 1) + ' %'; };
+    for (i = 0; i < NB; i++) {
+      var lab = i < NB - 1 ? (i * STEP + 1) + '–' + ((i + 1) * STEP) : 'über ' + ((NB - 1) * STEP);
+      rows += barRow(lab, 'Züge', b0[i], b1[i], b0[i] / max * 100, b1[i] / max * 100, fmt);
+    }
+    $('rows').innerHTML = rows;
+    $('rowsnote').textContent = 'Anteil der Spiele je Stufe. Mit Jokern verschiebt sich die Verteilung zu längeren Spielen. Je ' + nf(s0.n) + ' Spiele.';
+    table([
+      ['Ø Züge', df(s0.mean, 1), df(s1.mean, 1), sign(diff, 1) + ' (' + sign(rel * 100, 0) + ' %)'],
+      ['Median Züge', nf(s0.med), nf(s1.med), sign(s1.med - s0.med, 0)],
+      ['90 % der Spiele fertig nach', nf(s0.q90), nf(s1.q90), sign(s1.q90 - s0.q90, 0)],
+      ['Ø Fehlversuche', df(s0.fails, 1), df(s1.fails, 1), sign(s1.fails - s0.fails, 1)],
+      ['Ø Schlucke § 7', nf(s0.sips), nf(s1.sips), sign(s1.sips - s0.sips, 0)],
+      ['Sperre greift', '–', pf(s1.share, 1) + ' %', '']
+    ]);
+    return { v0: df(s0.mean, 1) + ' Züge', v1: df(s1.mean, 1) + ' Züge', d: sign(rel * 100, 0) + ' %' };
+  }
+
+  // ----- Ergebnis: einzelne Züge -----
+  function renderTurns(A, cfg) {
+    var s0 = sumTurn(A[0]), s1 = sumTurn(A[1]);
+    var diff = s1.p - s0.p, noise = Math.sqrt(s0.ci * s0.ci + s1.ci * s1.ci);
+    $('verdict').innerHTML = Math.abs(diff) <= noise
+      ? 'Kein klarer Unterschied bei der Chance auf die drei Pflichtkarten.'
+      : 'Mit Jokern ' + (diff < 0 ? 'sinkt' : 'steigt') + ' die Chance auf die drei Pflichtkarten um <em>' + pf(Math.abs(diff), 2) + ' Prozentpunkte</em>.';
+    $('duo').innerHTML = kcard(0, pf(s0.p, 1) + ' %', 'Chance auf die 3 Pflichtkarten, ± ' + pf(s0.ci, 2)) +
+      kcard(1, pf(s1.p, 1) + ' %', 'Chance auf die 3 Pflichtkarten, ± ' + pf(s1.ci, 2) + '. Sperre greift bei ' + pf(s1.share, 1) + ' %.');
+    $('charttitle').textContent = 'Trefferquote je Karte';
+    legend();
+    var rows = '', fmt = function (x) { return pf(x, 1) + ' %'; }, NAMES = ['1. Karte', '2. Karte', '3. Karte', '4. Karte'];
+    for (var i = 0; i < 4; i++) rows += barRow(NAMES[i], i < 3 ? 'Pflicht' : 'freiwillig', s0.rates[i], s1.rates[i], s0.rates[i] * 100, s1.rates[i] * 100, fmt);
+    $('rows').innerHTML = rows;
+    $('rowsnote').textContent = 'Trefferquote der jeweiligen Karte, wenn die Karten davor richtig waren. Achtung: Die Spielstände sind hier zufällig erzeugt. Ganze Spiele zeigen den Effekt der Joker realistischer.';
+    var t = [['3 Pflichtkarten geschafft', pf(s0.p, 2) + ' %', pf(s1.p, 2) + ' %', sign(diff * 100, 2) + ' Pp.']];
+    for (i = 0; i < 4; i++) t.push([NAMES[i], pf(s0.rates[i], 2) + ' %', pf(s1.rates[i], 2) + ' %', sign((s1.rates[i] - s0.rates[i]) * 100, 2) + ' Pp.']);
+    t.push(['Sperre greift', '–', pf(s1.share, 2) + ' %', '']);
+    table(t);
+    return { v0: pf(s0.p, 2) + ' %', v1: pf(s1.p, 2) + ' %', d: sign(diff * 100, 2) + ' Pp.' };
+  }
+
+  function renderHist() {
+    $('hist').innerHTML = st.history.map(function (h) {
+      return '<tr><td>' + (h.mode === 'game' ? 'Ganze Spiele' : 'Einzelne Züge') + '</td><td class="n">' + h.cards + '</td><td class="n">' + h.jokers +
+        '</td><td class="n">' + nf(h.n) + '</td><td class="n">' + h.v0 + '</td><td class="n">' + h.v1 + '</td><td class="n">' + h.d + '</td></tr>';
+    }).join('') || '<tr><td colspan="7" class="hint">Noch kein Lauf abgeschlossen.</td></tr>';
+  }
+
+  // ----- Live-Fenster (nur während des Laufs) -----
+  // Ein eigener Worker spielt einzelne Spiele mit Protokoll (traceGame), abwechselnd ohne und mit Jokern.
+  var live = { worker: null, cfg: null, trace: null, next: null, pending: 0, pendingInfo: null, reqs: 0, k: 0, idx: 0, timer: 0,
+    open: [], val: [], cells: [], turn: 0 };
+  var RANK = { 11: 'B', 12: 'D', 13: 'K', 14: 'A' };
+  function face(v) { return v === 0 ? 'Joker' : (RANK[v] || String(v)); }
+
+  function liveBuild() {
+    var html = '';
+    for (var i = 0; i < 25; i++) html += '<div class="cell' + (HOLES.indexOf(i) >= 0 ? ' hole' : ' back') + (i === MID ? ' mid' : '') + '"></div>';
+    $('board').innerHTML = html;
+    live.cells = Array.prototype.slice.call($('board').children);
+  }
+  function drawCell(c, extra) {
+    if (HOLES.indexOf(c) >= 0) return;
+    var el = live.cells[c], open = live.open[c];
+    el.className = 'cell ' + (open ? 'face' : 'back') + (c === MID ? ' mid' : '') + (open && live.val[c] === 0 ? ' joker' : '') + (extra ? ' ' + extra : '');
+    el.textContent = open ? face(live.val[c]) : '';
+  }
+  function liveCaption(text) {
+    var tr = live.trace;
+    $('livecap').innerHTML = tr ? (tr.jokers ? 'mit ' + tr.jokers + ' Jokern' : 'ohne Joker') + ' · <b>' + (text || 'Zug ' + nf(live.turn)) + '</b>' : 'Rechnet …';
+  }
+  function liveRequest() {
+    if (!live.worker || live.pending) return;
+    var c = live.cfg, withJokers = live.k % 2 === 1;
+    live.pending = ++live.reqs;
+    live.pendingInfo = { jokers: withJokers ? c.jokers : 0 };
+    live.worker.postMessage({ mode: 'trace', id: live.pending, decks: c.decks, jokers: live.pendingInfo.jokers,
+      seed: (c.seed + Math.floor(live.k / 2) * 1000003) >>> 0 });
+    live.k++;
+  }
+  function liveStart(tr) {
+    live.trace = tr; live.idx = 0; live.turn = 0;
+    liveRequest(); // nächstes Spiel schon vorbereiten
+    liveStep();
+  }
+  function liveStep() {
+    if (!live.trace || !st.running) return;
+    var e = live.trace.log[live.idx++], wait = 70, i, c;
+    if (!e) {
+      live.trace = null;
+      live.timer = setTimeout(function () {
+        if (!st.running) return;
+        if (live.next) { var n = live.next; live.next = null; liveStart(n); } else liveRequest();
+      }, 900);
+      return;
+    }
+    if (e.t === 'deal') {
+      for (i = 0; i < e.cells.length; i++) { c = e.cells[i]; live.val[c[0]] = c[1]; live.open[c[0]] = c[2]; drawCell(c[0]); }
+      wait = 400;
+    } else if (e.t === 'turn') {
+      live.turn = e.n; liveCaption();
+      wait = 0;
+    } else if (e.t === 'card') {
+      // Karte zeigen: grün bei Treffer, rot bei Fehler. Nach einem Fehler folgt gleich das Ereignis "fail".
+      live.val[e.cell] = e.v; live.open[e.cell] = 1;
+      drawCell(e.cell, e.hit ? 'hit' : 'miss');
+      if (!e.hit) live.open[e.cell] = 0;
+      else (function (cell) { setTimeout(function () { if (live.open[cell]) drawCell(cell); }, 160); })(e.cell);
+      if (e.cell === MID) wait = 600;
+    } else if (e.t === 'fail') {
+      for (i = 0; i < e.cells.length; i++) live.cells[e.cells[i][0]].classList.add('gone');
+      wait = 320;
+      (function (cells) {
+        setTimeout(function () {
+          for (var j = 0; j < cells.length; j++) { live.val[cells[j][0]] = cells[j][1]; live.open[cells[j][0]] = cells[j][2]; drawCell(cells[j][0]); }
+        }, 200);
+      })(e.cells);
+    } else if (e.t === 'end') {
+      liveCaption('Fenster zu nach ' + nf(e.n) + ' Zügen');
+    }
+    live.timer = setTimeout(liveStep, wait);
+  }
+  function liveOn(cfg) {
+    clearTimeout(live.timer);
+    live.cfg = { decks: cfg.decks, jokers: cfg.jokers, seed: cfg.seed };
+    live.trace = null; live.next = null; live.k = 0; live.pending = 0;
+    $('livecap').textContent = 'Rechnet …';
+    $('livebox').hidden = false; $('resultbox').hidden = true;
+    liveRequest();
+  }
+  function liveOff() {
+    clearTimeout(live.timer);
+    live.trace = null; live.next = null; live.pending = 0;
+    $('livebox').hidden = true; $('resultbox').hidden = false;
+  }
+  function liveInit() {
+    liveBuild();
+    try {
+      live.worker = new Worker(URL.createObjectURL(new Blob([SRC], { type: 'text/javascript' })));
+    } catch (e) { return; }
+    live.worker.onmessage = function (e) {
+      if (e.data.id !== live.pending) return; // veraltete Antwort
+      live.pending = 0;
+      var tr = e.data.trace;
+      tr.jokers = live.pendingInfo.jokers;
+      if (!st.running) return;
+      if (!live.trace) liveStart(tr); else live.next = tr;
+    };
+  }
+
+  // ----- Simulation: beide Fälle gleichzeitig -----
+  function stop() {
+    st.workers.forEach(function (w) { w.terminate(); });
+    st.workers = [];
+    if (st.url) { URL.revokeObjectURL(st.url); st.url = null; }
+    st.running = false;
+    liveOff();
+    uiRun();
+  }
+
+  function start() {
+    var jok = Math.max(1, Math.min(12, parseInt($('jok').value, 10) || 1));
+    $('jok').value = jok;
+    var cfg = { mode: st.mode, decks: st.decks, jokers: jok, trials: parseInt($('trials').value, 10), seed: Math.max(0, parseInt($('seed').value, 10) || 0) };
+    var CHUNK = MODES[cfg.mode].chunk, blocks = Math.ceil(cfg.trials / CHUNK);
+    // Jobs abwechselnd für beide Fälle, damit beide gleichmäßig vorankommen. Gleicher Block, gleicher Seed.
+    var jobs = [], b, f;
+    for (b = 0; b < blocks; b++) for (f = 0; f < 2; f++) {
+      var n = Math.min(CHUNK, cfg.trials - b * CHUNK);
+      jobs.push({ id: jobs.length, fall: f, n: n, msg: { mode: cfg.mode, decks: cfg.decks, jokers: f ? cfg.jokers : 0, trials: n, games: n, seed: (cfg.seed + b * 1000003) >>> 0, kMax: 12 } });
+    }
+    var next = 0, finished = 0, done = 0, total = cfg.trials * 2, agg = [null, null];
+    // Ein Kern bleibt für das Live-Fenster und die Seite frei.
+    var nW = Math.max(1, Math.min(jobs.length, (navigator.hardwareConcurrency || 2) - 1, 8));
+    try { st.url = URL.createObjectURL(new Blob([SRC], { type: 'text/javascript' })); }
+    catch (e) { $('status').textContent = 'Web Worker ist hier nicht verfügbar.'; return; }
+    st.running = true; st.t0 = performance.now();
+    uiRun();
+    liveOn(cfg);
+    $('status').textContent = 'Rechnet beide Fälle mit ' + nW + ' Threads …';
+    $('progfill').style.width = '0%';
+
+    function give(w) {
+      if (next >= jobs.length) return;
+      var job = jobs[next++];
+      w.job = job;
+      job.msg.id = job.id;
+      w.postMessage(job.msg);
+    }
+    function fail() { stop(); $('status').textContent = 'Der Worker konnte nicht gestartet werden.'; }
+
+    for (var k = 0; k < nW; k++) {
+      var w;
+      try { w = new Worker(st.url); } catch (e) { fail(); return; }
+      w.onerror = fail;
+      w.onmessage = (function (w) {
+        return function (e) {
+          agg[w.job.fall] = merge(agg[w.job.fall], e.data.stats);
+          done += w.job.n; finished++;
+          $('progfill').style.width = (done / total * 100) + '%';
+          if (finished === jobs.length) {
+            var sec = (performance.now() - st.t0) / 1000;
+            stop();
+            var h = (cfg.mode === 'game' ? renderGames : renderTurns)(agg, cfg);
+            $('status').textContent = 'Fertig in ' + df(sec, 1) + ' s';
+            st.history.unshift({ mode: cfg.mode, cards: cfg.decks * 52, jokers: cfg.jokers, n: cfg.trials, v0: h.v0, v1: h.v1, d: h.d });
+            if (st.history.length > 10) st.history.pop();
+            renderHist();
+          } else {
+            $('status').textContent = nf(done / 2) + ' von ' + nf(cfg.trials) + ' ' + (cfg.mode === 'game' ? 'Spielen' : 'Zügen') + ' pro Fall';
+            give(w);
+          }
+        };
+      })(w);
+      st.workers.push(w);
+      give(w);
+    }
+  }
+
+  document.querySelectorAll('[data-mode]').forEach(function (b) {
+    b.addEventListener('click', function () { st.mode = b.getAttribute('data-mode'); uiMode(); });
+  });
+  document.querySelectorAll('[data-deck]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      st.decks = parseInt(b.getAttribute('data-deck'), 10);
+      setPressed('[data-deck]', 'data-deck', st.decks);
+      $('jok').value = st.decks === 1 ? 2 : 6;
+    });
+  });
+  $('go').addEventListener('click', function () {
+    if (st.running) { stop(); $('status').textContent = 'Abgebrochen'; $('progfill').style.width = '0%'; }
+    else start();
+  });
+
+  $('code').textContent = SRC;
+  $('toggle').addEventListener('click', function () {
+    var open = $('code').hidden;
+    $('code').hidden = !open;
+    $('toggle').textContent = open ? 'Code verbergen' : 'Code anzeigen';
+    $('toggle').setAttribute('aria-expanded', String(open));
+  });
+  $('copy').addEventListener('click', function () {
+    function fallback() {
+      $('code').hidden = false;
+      $('toggle').textContent = 'Code verbergen';
+      $('toggle').setAttribute('aria-expanded', 'true');
+      var r = document.createRange(); r.selectNodeContents($('code'));
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      $('cmsg').textContent = 'Code markiert. Mit Strg+C kopieren.';
+    }
+    try {
+      navigator.clipboard.writeText(SRC).then(function () { $('cmsg').textContent = 'Kopiert.'; }, fallback);
+    } catch (e) { fallback(); }
+  });
+
+  uiMode(); uiRun(); renderHist(); liveInit();
+  start();
+})();
+</script>
+
+</body>
+</html>

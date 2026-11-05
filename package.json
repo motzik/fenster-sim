@@ -1,0 +1,16 @@
+{
+  "name": "fenster-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Simulation für das Trinkspiel Fenster aufmachen: Joker und Sperrregel im Vergleich",
+  "main": "sim_core.js",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "sync": "node scripts/sync-html.js",
+    "spiel": "node cli.js",
+    "zug": "node cli.js --modus zug"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
