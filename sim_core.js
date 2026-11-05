@@ -11,27 +11,50 @@
 //   - Karte 4 ist freiwillig weitergespielt (keine Sperre).
 //   - Beim ersten Fehler endet der Zug.
 
-// Felder sind Indizes 0..24 (Zeile * 5 + Spalte). Wert 0 steht für einen Joker, 2..14 für die Ränge (Ass = 14).
-var HOLES = [6, 8, 16, 18];
-var CORNERS = [0, 4, 20, 24];
-var MID = 12;
-var CELLS = [];
-var NEIGHBORS = {};
-(function () {
-  var i;
-  for (i = 0; i < 25; i++) if (HOLES.indexOf(i) < 0) CELLS.push(i);
+// Felder sind Indizes Zeile * W + Spalte. Wert 0 steht für einen Joker, 2..14 für die Ränge (Ass = 14).
+// Zwei Feldarten:
+//   single  Einzelfenster 5 × 5, 4 Lücken, 21 Karten, 4 Ecken, Mitte in der Mitte.
+//   double  Doppelfenster 5 × 9: zwei Fenster teilen sich die mittlere Spalte. 8 Lücken, 37 Karten,
+//           6 Ecken (2 davon auf der geteilten Spalte). Letzte Karte ist die Mitte der geteilten Spalte.
+//           Die Mitten der beiden Einzelfenster (M1, M2) sind normale Karten.
+var LAYOUTS = {
+  single: { W: 5, holes: [[1, 1], [1, 3], [3, 1], [3, 3]], corners: [[0, 0], [0, 4], [4, 0], [4, 4]], mid: [2, 2] },
+  double: { W: 9, holes: [[1, 1], [1, 3], [3, 1], [3, 3], [1, 5], [1, 7], [3, 5], [3, 7]],
+    corners: [[0, 0], [0, 4], [0, 8], [4, 0], [4, 4], [4, 8]], mid: [2, 4] }
+};
+var ROWS = 5, W = 5, SIZE = 25, LAYOUT = null;
+var HOLES = [], CORNERS = [], MID = 12, CELLS = [], NEIGHBORS = {}, IS_CORNER = {};
+
+// Stellt den Feldaufbau um. Die Listen werden an Ort und Stelle neu befüllt.
+function setLayout(name) {
+  name = name || 'single';
+  if (LAYOUT === name) return;
+  var L = LAYOUTS[name], i, k;
+  if (!L) throw new Error('Unbekanntes Feld: ' + name);
+  LAYOUT = name; W = L.W; SIZE = ROWS * W;
+  HOLES.length = 0; CORNERS.length = 0; CELLS.length = 0;
+  for (k in NEIGHBORS) delete NEIGHBORS[k];
+  for (k in IS_CORNER) delete IS_CORNER[k];
+  for (i = 0; i < L.holes.length; i++) HOLES.push(L.holes[i][0] * W + L.holes[i][1]);
+  for (i = 0; i < L.corners.length; i++) { CORNERS.push(L.corners[i][0] * W + L.corners[i][1]); IS_CORNER[CORNERS[i]] = 1; }
+  MID = L.mid[0] * W + L.mid[1];
+  for (i = 0; i < SIZE; i++) if (HOLES.indexOf(i) < 0) CELLS.push(i);
   var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   CELLS.forEach(function (cell) {
-    var r = Math.floor(cell / 5), c = cell % 5, list = [];
+    var r = Math.floor(cell / W), c = cell % W, list = [];
     dirs.forEach(function (d) {
       var rr = r + d[0], cc = c + d[1];
-      if (rr < 0 || rr > 4 || cc < 0 || cc > 4) return;
-      var j = rr * 5 + cc;
+      if (rr < 0 || rr >= ROWS || cc < 0 || cc >= W) return;
+      var j = rr * W + cc;
       if (HOLES.indexOf(j) < 0) list.push(j);
     });
     NEIGHBORS[cell] = list;
   });
-})();
+}
+function layout() {
+  return { name: LAYOUT, rows: ROWS, cols: W, size: SIZE, holes: HOLES, corners: CORNERS, mid: MID, cells: CELLS, neighbors: NEIGHBORS };
+}
+setLayout('single');
 
 // Zufallszahlen (mulberry32), damit ein Seed immer dasselbe Ergebnis liefert.
 function makeRng(seed) {
@@ -172,18 +195,20 @@ function playTurn(st, stats) {
   }
 }
 
-// cfg: { decks, jokers, trials, seed, kMax }
+// cfg: { decks, jokers, trials, seed, kMax, layout }
 // kMax: so viele Karten werden vor dem Zug zufällig zusätzlich aufgedeckt (0 bis kMax, gleich verteilt).
 function runBatch(cfg) {
   var decks = cfg.decks, jokers = cfg.jokers, trials = cfg.trials;
-  var kMax = cfg.kMax === undefined ? 12 : cfg.kMax;
+  setLayout(cfg.layout);
+  // Standard: drei Viertel der frei aufdeckbaren Felder (Einzelfenster 12, Doppelfenster 22).
+  var kMax = cfg.kMax === undefined ? Math.round((CELLS.length - CORNERS.length - 1) * 0.75) : cfg.kMax;
   var rng = makeRng(cfg.seed);
   var deck = [], d, r, i, t;
   for (d = 0; d < decks; d++) for (r = 2; r <= 14; r++) for (i = 0; i < 4; i++) deck.push(r);
   for (i = 0; i < jokers; i++) deck.push(0);
   var base = new Int16Array(15);
   for (i = 0; i < deck.length; i++) base[deck[i]]++;
-  var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: 0 };
+  var st = { revealed: new Int8Array(SIZE), value: new Int8Array(SIZE), counts: new Int16Array(15), N: 0 };
   var stats = emptyStats();
   for (t = 0; t < trials; t++) {
     // Die 21 Fensterkarten ziehen (Teil-Mischen reicht).
@@ -227,9 +252,9 @@ function runBatch(cfg) {
 //   Strategie: Nach den Pflichtkarten spielt der Spieler freiwillig weiter, solange die beste Karte
 //        seine Schwelle erreicht und sich lohnt (siehe keepPlaying). Ohne Schwelle gibt er sofort weiter.
 // Der Spieler zählt keine Karten mit: Unbekannt ist für ihn alles, was nicht offen im Fenster liegt.
-var GAME_BINS = 2000; // Histogramm der Züge pro Spiel, das letzte Fach sammelt alles darüber
+var GAME_BINS = 20000; // Histogramm der Züge pro Spiel, das letzte Fach sammelt alles darüber
 
-function isCorner(cell) { return cell === 0 || cell === 4 || cell === 20 || cell === 24; }
+function isCorner(cell) { return IS_CORNER[cell] === 1; }
 
 // Alle offenen Karten, die über offene Nachbarn mit dem Feld start zusammenhängen, plus start selbst.
 function component(st, start) {
@@ -378,15 +403,16 @@ function thresholdOf(cfg) {
   return cfg.threshold === null || cfg.threshold === false ? null : cfg.threshold;
 }
 
-// cfg: { decks, jokers, games, seed, threshold, maxTurns, maxAttempts }
+// cfg: { decks, jokers, games, seed, threshold, layout, maxTurns, maxAttempts }
 function runGames(cfg) {
-  var rng = makeRng(cfg.seed), maxTurns = cfg.maxTurns || 5000, maxAttempts = cfg.maxAttempts || 50000;
+  setLayout(cfg.layout);
+  var rng = makeRng(cfg.seed), maxTurns = cfg.maxTurns || 200000, maxAttempts = cfg.maxAttempts || 5000000;
   var deck = [], d, r, i, t, n;
   for (d = 0; d < cfg.decks; d++) for (r = 2; r <= 14; r++) for (i = 0; i < 4; i++) deck.push(r);
   for (i = 0; i < cfg.jokers; i++) deck.push(0);
   var base = new Int16Array(15);
   for (i = 0; i < deck.length; i++) base[deck[i]]++;
-  var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: 0 };
+  var st = { revealed: new Int8Array(SIZE), value: new Int8Array(SIZE), counts: new Int16Array(15), N: 0 };
   var stats = emptyGameStats();
   for (t = 0; t < cfg.games; t++) {
     var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, threshold: thresholdOf(cfg) };
@@ -410,17 +436,18 @@ function runGames(cfg) {
 // Ein einzelnes Spiel mit Protokoll, zum Anschauen. cfg: { decks, jokers, seed }
 // Ergebnis: { turns, log } mit den Ereignissen deal, turn, card, fail, end.
 function traceGame(cfg) {
+  setLayout(cfg.layout);
   var rng = makeRng(cfg.seed), deck = [], d, r, i;
   for (d = 0; d < cfg.decks; d++) for (r = 2; r <= 14; r++) for (i = 0; i < 4; i++) deck.push(r);
   for (i = 0; i < cfg.jokers; i++) deck.push(0);
-  var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: deck.length };
+  var st = { revealed: new Int8Array(SIZE), value: new Int8Array(SIZE), counts: new Int16Array(15), N: deck.length };
   for (i = 0; i < deck.length; i++) st.counts[deck[i]]++;
   var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, threshold: thresholdOf(cfg), log: [] };
   shuffle(g.stack, rng);
   for (i = 0; i < CELLS.length; i++) st.value[CELLS[i]] = draw(g, rng);
   for (i = 0; i < CORNERS.length; i++) { reveal(st, CORNERS[i]); g.open++; }
   g.log.push({ t: 'deal', cells: logCells(st, CELLS) });
-  var n = playGame(st, g, rng, emptyGameStats(), cfg.maxTurns || 5000, cfg.maxAttempts || 50000);
+  var n = playGame(st, g, rng, emptyGameStats(), cfg.maxTurns || 200000, cfg.maxAttempts || 5000000);
   return { turns: n, log: g.log };
 }
 
@@ -430,6 +457,7 @@ if (typeof module !== 'undefined' && module.exports) {
     runGames: runGames, traceGame: traceGame, emptyGameStats: emptyGameStats, mergeGameStats: mergeGameStats, GAME_BINS: GAME_BINS,
     // Für Tests: Feldaufbau und Einzelschritte
     HOLES: HOLES, CORNERS: CORNERS, MID: MID, CELLS: CELLS, NEIGHBORS: NEIGHBORS,
+    LAYOUTS: LAYOUTS, setLayout: setLayout, layout: layout,
     makeRng: makeRng, bestBet: bestBet, wins: wins, pick: pick, reveal: reveal, playTurn: playTurn,
     component: component, failAt: failAt, keepPlaying: keepPlaying
   };

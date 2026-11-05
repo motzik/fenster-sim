@@ -31,3 +31,35 @@ test('Nachbarschaft ist symmetrisch', () => {
     for (const n of sim.NEIGHBORS[c]) assert.ok(sim.NEIGHBORS[n].includes(c), `${c} → ${n}, aber nicht zurück`);
   }
 });
+
+// ----- Doppelfenster: zwei Fenster teilen sich die mittlere Spalte -----
+test('Doppelfenster: 37 Felder, 8 Lücken, 6 Ecken, Mitte in der geteilten Spalte', () => {
+  sim.setLayout('double');
+  const L = sim.layout();
+  assert.equal(L.cols, 9);
+  assert.equal(L.cells.length, 37);
+  assert.deepEqual(sorted(L.holes), [10, 12, 14, 16, 28, 30, 32, 34]);
+  assert.deepEqual(sorted(L.corners), [0, 4, 8, 36, 40, 44]);
+  assert.equal(L.mid, 22); // Reihe 3, Spalte 5
+  sim.setLayout('single');
+});
+
+test('Doppelfenster: Mitte und alte Mitten M1/M2 haben je 4 Nachbarn', () => {
+  sim.setLayout('double');
+  const L = sim.layout();
+  assert.deepEqual(sorted(L.neighbors[22]), [13, 21, 23, 31]);
+  assert.deepEqual(sorted(L.neighbors[20]), [11, 19, 21, 29]); // M1
+  assert.deepEqual(sorted(L.neighbors[24]), [15, 23, 25, 33]); // M2
+  // Geteilte Spalte, Reihe 2: links und rechts Lücken, also nur oben und unten
+  assert.deepEqual(sorted(L.neighbors[13]), [4, 22]);
+  for (const c of L.cells) for (const n of L.neighbors[c]) assert.ok(L.neighbors[n].includes(c), `${c} → ${n} nicht symmetrisch`);
+  sim.setLayout('single');
+});
+
+test('setLayout zurück auf Einzelfenster stellt alles wieder her', () => {
+  sim.setLayout('double');
+  sim.setLayout('single');
+  assert.equal(sim.CELLS.length, 21);
+  assert.deepEqual(sorted(sim.NEIGHBORS[7]), [2, 12]);
+  assert.equal(sim.layout().mid, 12);
+});

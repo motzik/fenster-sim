@@ -90,7 +90,9 @@
 
   /* Live-Fenster: nur während des Laufs, als Ladebildschirm */
   .livebox { align-items: center; padding-block: 28px; }
-  .board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: min(100%, 300px); }
+  .board { display: grid; grid-template-columns: repeat(var(--cols, 5), 1fr); gap: 6px; width: min(100%, 300px); }
+  .board.double { width: min(100%, 540px); gap: 5px; }
+  .board.double .cell { font-size: clamp(11px, 2.8vw, 18px); }
   .cell { aspect-ratio: 5 / 7; border-radius: 6px; display: flex; align-items: center; justify-content: center;
     font-family: var(--f-display); font-weight: 700; font-size: clamp(15px, 4.6vw, 21px); font-variant-numeric: tabular-nums;
     border: 1px solid transparent; transition: background-color .18s, transform .18s, opacity .18s, box-shadow .12s; }
@@ -174,6 +176,14 @@
             <button type="button" data-mode="turn" aria-pressed="false">Einzelne Züge</button>
           </div>
           <span class="hint" id="modehint"></span>
+        </div>
+        <div class="ctl wide">
+          <span class="cl" id="l-layout">Feld</span>
+          <div class="seg" role="group" aria-labelledby="l-layout">
+            <button type="button" data-layout="single" aria-pressed="true">Einzelfenster · 21 Karten</button>
+            <button type="button" data-layout="double" aria-pressed="false">Doppelfenster · 37 Karten</button>
+          </div>
+          <span class="hint" id="layouthint"></span>
         </div>
         <div class="ctl">
           <span class="cl" id="l-deck">Blatt</span>
@@ -312,27 +322,50 @@
 //   - Karte 4 ist freiwillig weitergespielt (keine Sperre).
 //   - Beim ersten Fehler endet der Zug.
 
-// Felder sind Indizes 0..24 (Zeile * 5 + Spalte). Wert 0 steht für einen Joker, 2..14 für die Ränge (Ass = 14).
-var HOLES = [6, 8, 16, 18];
-var CORNERS = [0, 4, 20, 24];
-var MID = 12;
-var CELLS = [];
-var NEIGHBORS = {};
-(function () {
-  var i;
-  for (i = 0; i < 25; i++) if (HOLES.indexOf(i) < 0) CELLS.push(i);
+// Felder sind Indizes Zeile * W + Spalte. Wert 0 steht für einen Joker, 2..14 für die Ränge (Ass = 14).
+// Zwei Feldarten:
+//   single  Einzelfenster 5 × 5, 4 Lücken, 21 Karten, 4 Ecken, Mitte in der Mitte.
+//   double  Doppelfenster 5 × 9: zwei Fenster teilen sich die mittlere Spalte. 8 Lücken, 37 Karten,
+//           6 Ecken (2 davon auf der geteilten Spalte). Letzte Karte ist die Mitte der geteilten Spalte.
+//           Die Mitten der beiden Einzelfenster (M1, M2) sind normale Karten.
+var LAYOUTS = {
+  single: { W: 5, holes: [[1, 1], [1, 3], [3, 1], [3, 3]], corners: [[0, 0], [0, 4], [4, 0], [4, 4]], mid: [2, 2] },
+  double: { W: 9, holes: [[1, 1], [1, 3], [3, 1], [3, 3], [1, 5], [1, 7], [3, 5], [3, 7]],
+    corners: [[0, 0], [0, 4], [0, 8], [4, 0], [4, 4], [4, 8]], mid: [2, 4] }
+};
+var ROWS = 5, W = 5, SIZE = 25, LAYOUT = null;
+var HOLES = [], CORNERS = [], MID = 12, CELLS = [], NEIGHBORS = {}, IS_CORNER = {};
+
+// Stellt den Feldaufbau um. Die Listen werden an Ort und Stelle neu befüllt.
+function setLayout(name) {
+  name = name || 'single';
+  if (LAYOUT === name) return;
+  var L = LAYOUTS[name], i, k;
+  if (!L) throw new Error('Unbekanntes Feld: ' + name);
+  LAYOUT = name; W = L.W; SIZE = ROWS * W;
+  HOLES.length = 0; CORNERS.length = 0; CELLS.length = 0;
+  for (k in NEIGHBORS) delete NEIGHBORS[k];
+  for (k in IS_CORNER) delete IS_CORNER[k];
+  for (i = 0; i < L.holes.length; i++) HOLES.push(L.holes[i][0] * W + L.holes[i][1]);
+  for (i = 0; i < L.corners.length; i++) { CORNERS.push(L.corners[i][0] * W + L.corners[i][1]); IS_CORNER[CORNERS[i]] = 1; }
+  MID = L.mid[0] * W + L.mid[1];
+  for (i = 0; i < SIZE; i++) if (HOLES.indexOf(i) < 0) CELLS.push(i);
   var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   CELLS.forEach(function (cell) {
-    var r = Math.floor(cell / 5), c = cell % 5, list = [];
+    var r = Math.floor(cell / W), c = cell % W, list = [];
     dirs.forEach(function (d) {
       var rr = r + d[0], cc = c + d[1];
-      if (rr < 0 || rr > 4 || cc < 0 || cc > 4) return;
-      var j = rr * 5 + cc;
+      if (rr < 0 || rr >= ROWS || cc < 0 || cc >= W) return;
+      var j = rr * W + cc;
       if (HOLES.indexOf(j) < 0) list.push(j);
     });
     NEIGHBORS[cell] = list;
   });
-})();
+}
+function layout() {
+  return { name: LAYOUT, rows: ROWS, cols: W, size: SIZE, holes: HOLES, corners: CORNERS, mid: MID, cells: CELLS, neighbors: NEIGHBORS };
+}
+setLayout('single');
 
 // Zufallszahlen (mulberry32), damit ein Seed immer dasselbe Ergebnis liefert.
 function makeRng(seed) {
@@ -473,18 +506,20 @@ function playTurn(st, stats) {
   }
 }
 
-// cfg: { decks, jokers, trials, seed, kMax }
+// cfg: { decks, jokers, trials, seed, kMax, layout }
 // kMax: so viele Karten werden vor dem Zug zufällig zusätzlich aufgedeckt (0 bis kMax, gleich verteilt).
 function runBatch(cfg) {
   var decks = cfg.decks, jokers = cfg.jokers, trials = cfg.trials;
-  var kMax = cfg.kMax === undefined ? 12 : cfg.kMax;
+  setLayout(cfg.layout);
+  // Standard: drei Viertel der frei aufdeckbaren Felder (Einzelfenster 12, Doppelfenster 22).
+  var kMax = cfg.kMax === undefined ? Math.round((CELLS.length - CORNERS.length - 1) * 0.75) : cfg.kMax;
   var rng = makeRng(cfg.seed);
   var deck = [], d, r, i, t;
   for (d = 0; d < decks; d++) for (r = 2; r <= 14; r++) for (i = 0; i < 4; i++) deck.push(r);
   for (i = 0; i < jokers; i++) deck.push(0);
   var base = new Int16Array(15);
   for (i = 0; i < deck.length; i++) base[deck[i]]++;
-  var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: 0 };
+  var st = { revealed: new Int8Array(SIZE), value: new Int8Array(SIZE), counts: new Int16Array(15), N: 0 };
   var stats = emptyStats();
   for (t = 0; t < trials; t++) {
     // Die 21 Fensterkarten ziehen (Teil-Mischen reicht).
@@ -528,9 +563,9 @@ function runBatch(cfg) {
 //   Strategie: Nach den Pflichtkarten spielt der Spieler freiwillig weiter, solange die beste Karte
 //        seine Schwelle erreicht und sich lohnt (siehe keepPlaying). Ohne Schwelle gibt er sofort weiter.
 // Der Spieler zählt keine Karten mit: Unbekannt ist für ihn alles, was nicht offen im Fenster liegt.
-var GAME_BINS = 2000; // Histogramm der Züge pro Spiel, das letzte Fach sammelt alles darüber
+var GAME_BINS = 20000; // Histogramm der Züge pro Spiel, das letzte Fach sammelt alles darüber
 
-function isCorner(cell) { return cell === 0 || cell === 4 || cell === 20 || cell === 24; }
+function isCorner(cell) { return IS_CORNER[cell] === 1; }
 
 // Alle offenen Karten, die über offene Nachbarn mit dem Feld start zusammenhängen, plus start selbst.
 function component(st, start) {
@@ -679,15 +714,16 @@ function thresholdOf(cfg) {
   return cfg.threshold === null || cfg.threshold === false ? null : cfg.threshold;
 }
 
-// cfg: { decks, jokers, games, seed, threshold, maxTurns, maxAttempts }
+// cfg: { decks, jokers, games, seed, threshold, layout, maxTurns, maxAttempts }
 function runGames(cfg) {
-  var rng = makeRng(cfg.seed), maxTurns = cfg.maxTurns || 5000, maxAttempts = cfg.maxAttempts || 50000;
+  setLayout(cfg.layout);
+  var rng = makeRng(cfg.seed), maxTurns = cfg.maxTurns || 200000, maxAttempts = cfg.maxAttempts || 5000000;
   var deck = [], d, r, i, t, n;
   for (d = 0; d < cfg.decks; d++) for (r = 2; r <= 14; r++) for (i = 0; i < 4; i++) deck.push(r);
   for (i = 0; i < cfg.jokers; i++) deck.push(0);
   var base = new Int16Array(15);
   for (i = 0; i < deck.length; i++) base[deck[i]]++;
-  var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: 0 };
+  var st = { revealed: new Int8Array(SIZE), value: new Int8Array(SIZE), counts: new Int16Array(15), N: 0 };
   var stats = emptyGameStats();
   for (t = 0; t < cfg.games; t++) {
     var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, threshold: thresholdOf(cfg) };
@@ -711,17 +747,18 @@ function runGames(cfg) {
 // Ein einzelnes Spiel mit Protokoll, zum Anschauen. cfg: { decks, jokers, seed }
 // Ergebnis: { turns, log } mit den Ereignissen deal, turn, card, fail, end.
 function traceGame(cfg) {
+  setLayout(cfg.layout);
   var rng = makeRng(cfg.seed), deck = [], d, r, i;
   for (d = 0; d < cfg.decks; d++) for (r = 2; r <= 14; r++) for (i = 0; i < 4; i++) deck.push(r);
   for (i = 0; i < cfg.jokers; i++) deck.push(0);
-  var st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: deck.length };
+  var st = { revealed: new Int8Array(SIZE), value: new Int8Array(SIZE), counts: new Int16Array(15), N: deck.length };
   for (i = 0; i < deck.length; i++) st.counts[deck[i]]++;
   var g = { stack: deck.slice(), disc: [], open: 0, reshuffles: 0, threshold: thresholdOf(cfg), log: [] };
   shuffle(g.stack, rng);
   for (i = 0; i < CELLS.length; i++) st.value[CELLS[i]] = draw(g, rng);
   for (i = 0; i < CORNERS.length; i++) { reveal(st, CORNERS[i]); g.open++; }
   g.log.push({ t: 'deal', cells: logCells(st, CELLS) });
-  var n = playGame(st, g, rng, emptyGameStats(), cfg.maxTurns || 5000, cfg.maxAttempts || 50000);
+  var n = playGame(st, g, rng, emptyGameStats(), cfg.maxTurns || 200000, cfg.maxAttempts || 5000000);
   return { turns: n, log: g.log };
 }
 
@@ -731,6 +768,7 @@ if (typeof module !== 'undefined' && module.exports) {
     runGames: runGames, traceGame: traceGame, emptyGameStats: emptyGameStats, mergeGameStats: mergeGameStats, GAME_BINS: GAME_BINS,
     // Für Tests: Feldaufbau und Einzelschritte
     HOLES: HOLES, CORNERS: CORNERS, MID: MID, CELLS: CELLS, NEIGHBORS: NEIGHBORS,
+    LAYOUTS: LAYOUTS, setLayout: setLayout, layout: layout,
     makeRng: makeRng, bestBet: bestBet, wins: wins, pick: pick, reveal: reveal, playTurn: playTurn,
     component: component, failAt: failAt, keepPlaying: keepPlaying
   };
@@ -748,13 +786,18 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var SRC = $('sim-src').textContent.replace(/^\s+|\s+$/g, '');
-  var HOLES = [6, 8, 16, 18], MID = 12;
+  var FIELDS = {
+    single: { cols: 5, holes: [6, 8, 16, 18], mid: 12, name: 'Einzelfenster' },
+    double: { cols: 9, holes: [10, 12, 14, 16, 28, 30, 32, 34], mid: 22, name: 'Doppelfenster' }
+  };
+  var HOLES = FIELDS.single.holes, MID = FIELDS.single.mid;
   var MODES = {
     game: { chunk: 500, label: 'Spiele pro Fall', opts: [2000, 10000, 50000, 100000], def: 10000 },
+    gameDouble: { chunk: 100, label: 'Spiele pro Fall', opts: [500, 2000, 5000, 10000], def: 2000 },
     turn: { chunk: 25000, label: 'Züge pro Fall', opts: [100000, 500000, 1000000, 5000000], def: 500000 }
   };
   var CASES = ['Ohne Joker', 'Mit Jokern und Sperre'];
-  var st = { mode: 'game', decks: 1, running: false, workers: [], url: null, history: [], t0: 0 };
+  var st = { mode: 'game', layout: 'single', decks: 1, running: false, workers: [], url: null, history: [], t0: 0 };
   var nf = function (n) { return Math.round(n).toLocaleString('de-AT'); };
   var df = function (x, d) { return x.toLocaleString('de-AT', { minimumFractionDigits: d, maximumFractionDigits: d }); };
   var pf = function (x, d) { return df(x * 100, d); };
@@ -774,9 +817,14 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
   function setPressed(sel, attr, val) {
     document.querySelectorAll(sel).forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute(attr) === String(val))); });
   }
+  function modeKey() { return st.mode === 'game' && st.layout === 'double' ? 'gameDouble' : st.mode; }
   function uiMode() {
-    var m = MODES[st.mode];
+    var m = MODES[modeKey()];
     setPressed('[data-mode]', 'data-mode', st.mode);
+    setPressed('[data-layout]', 'data-layout', st.layout);
+    $('layouthint').textContent = st.layout === 'double'
+      ? 'Zwei Fenster teilen sich die mittlere Spalte. 6 Ecken offen, die Mitte der geteilten Spalte kommt zuletzt. Spiele dauern sehr lange, darum weniger Spiele pro Lauf.'
+      : 'Ein Fenster aus 5 × 5 Karten mit 4 Lücken, die Mitte kommt zuletzt.';
     $('trialslab').textContent = m.label;
     $('trials').innerHTML = m.opts.map(function (n) { return '<option value="' + n + '"' + (n === m.def ? ' selected' : '') + '>' + nf(n) + '</option>'; }).join('');
     $('thrctl').hidden = st.mode !== 'game';
@@ -788,7 +836,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
     $('go').textContent = st.running ? 'Abbrechen' : 'Simulation starten';
     $('go').classList.toggle('stop', st.running);
     ['trials', 'seed', 'jok', 'thr'].forEach(function (id) { $(id).disabled = st.running; });
-    document.querySelectorAll('[data-deck],[data-mode]').forEach(function (b) { b.disabled = st.running; });
+    document.querySelectorAll('[data-deck],[data-mode],[data-layout]').forEach(function (b) { b.disabled = st.running; });
   }
 
   // ----- Kennzahlen -----
@@ -830,20 +878,22 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
     var s0 = sumGame(A[0]), s1 = sumGame(A[1]);
     var diff = s1.mean - s0.mean, rel = diff / s0.mean, noise = Math.sqrt(s0.ci * s0.ci + s1.ci * s1.ci);
     $('verdict').innerHTML = Math.abs(diff) <= noise
-      ? 'Kein klarer Unterschied: Mit und ohne Joker dauert ein Fenster etwa gleich lang.'
-      : 'Mit Jokern dauert ein Fenster im Schnitt <em>' + nf(Math.abs(diff)) + ' Züge ' + (diff > 0 ? 'länger' : 'kürzer') + '</em> (' + sign(rel * 100, 0) + ' %).';
+      ? 'Kein klarer Unterschied: Mit und ohne Joker dauert ein ' + FIELDS[cfg.layout].name + ' etwa gleich lang.'
+      : 'Mit Jokern dauert ein ' + FIELDS[cfg.layout].name + ' im Schnitt <em>' + nf(Math.abs(diff)) + ' Züge ' + (diff > 0 ? 'länger' : 'kürzer') + '</em> (' + sign(rel * 100, 0) + ' %).';
     var extraTxt = function (x) { return cfg.threshold === null ? '' : ' ' + nf(x.given) + ' Schlucke verteilt pro Spiel.'; };
     $('duo').innerHTML = kcard(0, df(s0.mean, 1), 'Ø Züge bis das Fenster zu ist, ± ' + df(s0.ci, 1) + '.' + extraTxt(s0)) +
       kcard(1, df(s1.mean, 1), 'Ø Züge bis das Fenster zu ist, ± ' + df(s1.ci, 1) + '.' + extraTxt(s1));
-    // Verteilung in Stufen zu 50 Zügen, alles über 400 in einer Stufe.
-    var STEP = 50, NB = 9, b0 = [], b1 = [], i, k, max = 0;
+    // Verteilung in 9 Stufen. Die Stufenbreite richtet sich nach dem 90-%-Wert, die letzte Stufe sammelt den Rest.
+    var NB = 9, b0 = [], b1 = [], i, k, max = 0, STEP = 1000;
+    var NICE = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000];
+    for (i = 0; i < NICE.length; i++) if (NICE[i] * (NB - 1) >= Math.max(s0.q90, s1.q90)) { STEP = NICE[i]; break; }
     for (i = 0; i < NB; i++) { b0.push(0); b1.push(0); }
     for (k = 1; k < A[0].hist.length; k++) {
       var j = Math.min(Math.floor((k - 1) / STEP), NB - 1);
       b0[j] += A[0].hist[k] / s0.n; b1[j] += A[1].hist[k] / s1.n;
     }
     for (i = 0; i < NB; i++) max = Math.max(max, b0[i], b1[i]);
-    $('charttitle').textContent = 'Wie viele Züge ein Fenster dauert';
+    $('charttitle').textContent = 'Wie viele Züge ein ' + FIELDS[cfg.layout].name + ' dauert';
     legend();
     var rows = '', fmt = function (x) { return pf(x, 1) + ' %'; };
     for (i = 0; i < NB; i++) {
@@ -891,7 +941,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
 
   function renderHist() {
     $('hist').innerHTML = st.history.map(function (h) {
-      return '<tr><td>' + (h.mode === 'game' ? 'Ganze Spiele · ' + (h.thr === null ? 'ohne Weiterspielen' : 'ab ' + pf(h.thr, 0) + ' %') : 'Einzelne Züge') + '</td><td class="n">' + h.cards + '</td><td class="n">' + h.jokers +
+      return '<tr><td>' + FIELDS[h.layout].name + ' · ' + (h.mode === 'game' ? 'Spiele · ' + (h.thr === null ? 'ohne Weiterspielen' : 'ab ' + pf(h.thr, 0) + ' %') : 'Einzelne Züge') + '</td><td class="n">' + h.cards + '</td><td class="n">' + h.jokers +
         '</td><td class="n">' + nf(h.n) + '</td><td class="n">' + h.v0 + '</td><td class="n">' + h.v1 + '</td><td class="n">' + h.d + '</td></tr>';
     }).join('') || '<tr><td colspan="7" class="hint">Noch kein Lauf abgeschlossen.</td></tr>';
   }
@@ -903,9 +953,14 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
   var RANK = { 11: 'B', 12: 'D', 13: 'K', 14: 'A' };
   function face(v) { return v === 0 ? 'Joker' : (RANK[v] || String(v)); }
 
-  function liveBuild() {
+  function liveBuild(layout) {
+    var F = FIELDS[layout || 'single'];
+    HOLES = F.holes; MID = F.mid;
+    $('board').style.setProperty('--cols', F.cols);
+    $('board').classList.toggle('double', layout === 'double');
+    live.open = []; live.val = [];
     var html = '';
-    for (var i = 0; i < 25; i++) html += '<div class="cell' + (HOLES.indexOf(i) >= 0 ? ' hole' : ' back') + (i === MID ? ' mid' : '') + '"></div>';
+    for (var i = 0; i < F.cols * 5; i++) html += '<div class="cell' + (HOLES.indexOf(i) >= 0 ? ' hole' : ' back') + (i === MID ? ' mid' : '') + '"></div>';
     $('board').innerHTML = html;
     live.cells = Array.prototype.slice.call($('board').children);
   }
@@ -924,7 +979,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
     var c = live.cfg, withJokers = live.k % 2 === 1;
     live.pending = ++live.reqs;
     live.pendingInfo = { jokers: withJokers ? c.jokers : 0 };
-    live.worker.postMessage({ mode: 'trace', id: live.pending, decks: c.decks, jokers: live.pendingInfo.jokers, threshold: c.threshold,
+    live.worker.postMessage({ mode: 'trace', id: live.pending, decks: c.decks, jokers: live.pendingInfo.jokers, threshold: c.threshold, layout: c.layout,
       seed: (c.seed + Math.floor(live.k / 2) * 1000003) >>> 0 });
     live.k++;
   }
@@ -972,7 +1027,8 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
   }
   function liveOn(cfg) {
     clearTimeout(live.timer);
-    live.cfg = { decks: cfg.decks, jokers: cfg.jokers, seed: cfg.seed, threshold: cfg.threshold };
+    live.cfg = { decks: cfg.decks, jokers: cfg.jokers, seed: cfg.seed, threshold: cfg.threshold, layout: cfg.layout };
+    liveBuild(cfg.layout);
     live.trace = null; live.next = null; live.k = 0; live.pending = 0;
     $('livecap').textContent = 'Rechnet …';
     $('livebox').hidden = false; $('resultbox').hidden = true;
@@ -1012,13 +1068,13 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
     var jok = Math.max(1, Math.min(12, parseInt($('jok').value, 10) || 1));
     $('jok').value = jok;
     var thr = $('thr').value === 'aus' ? null : parseFloat($('thr').value);
-    var cfg = { mode: st.mode, decks: st.decks, jokers: jok, threshold: thr, trials: parseInt($('trials').value, 10), seed: Math.max(0, parseInt($('seed').value, 10) || 0) };
-    var CHUNK = MODES[cfg.mode].chunk, blocks = Math.ceil(cfg.trials / CHUNK);
+    var cfg = { mode: st.mode, layout: st.layout, decks: st.decks, jokers: jok, threshold: thr, trials: parseInt($('trials').value, 10), seed: Math.max(0, parseInt($('seed').value, 10) || 0) };
+    var CHUNK = MODES[modeKey()].chunk, blocks = Math.ceil(cfg.trials / CHUNK);
     // Jobs abwechselnd für beide Fälle, damit beide gleichmäßig vorankommen. Gleicher Block, gleicher Seed.
     var jobs = [], b, f;
     for (b = 0; b < blocks; b++) for (f = 0; f < 2; f++) {
       var n = Math.min(CHUNK, cfg.trials - b * CHUNK);
-      jobs.push({ id: jobs.length, fall: f, n: n, msg: { mode: cfg.mode, decks: cfg.decks, jokers: f ? cfg.jokers : 0, threshold: cfg.threshold, trials: n, games: n, seed: (cfg.seed + b * 1000003) >>> 0, kMax: 12 } });
+      jobs.push({ id: jobs.length, fall: f, n: n, msg: { mode: cfg.mode, decks: cfg.decks, jokers: f ? cfg.jokers : 0, threshold: cfg.threshold, layout: cfg.layout, trials: n, games: n, seed: (cfg.seed + b * 1000003) >>> 0 } });
     }
     var next = 0, finished = 0, done = 0, total = cfg.trials * 2, agg = [null, null];
     // Ein Kern bleibt für das Live-Fenster und die Seite frei.
@@ -1054,7 +1110,7 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
             stop();
             var h = (cfg.mode === 'game' ? renderGames : renderTurns)(agg, cfg);
             $('status').textContent = 'Fertig in ' + df(sec, 1) + ' s';
-            st.history.unshift({ thr: cfg.threshold, mode: cfg.mode, cards: cfg.decks * 52, jokers: cfg.jokers, n: cfg.trials, v0: h.v0, v1: h.v1, d: h.d });
+            st.history.unshift({ layout: cfg.layout, thr: cfg.threshold, mode: cfg.mode, cards: cfg.decks * 52, jokers: cfg.jokers, n: cfg.trials, v0: h.v0, v1: h.v1, d: h.d });
             if (st.history.length > 10) st.history.pop();
             renderHist();
           } else {
@@ -1070,6 +1126,9 @@ if (typeof self !== 'undefined' && typeof postMessage === 'function' && typeof d
 
   document.querySelectorAll('[data-mode]').forEach(function (b) {
     b.addEventListener('click', function () { st.mode = b.getAttribute('data-mode'); uiMode(); });
+  });
+  document.querySelectorAll('[data-layout]').forEach(function (b) {
+    b.addEventListener('click', function () { st.layout = b.getAttribute('data-layout'); uiMode(); });
   });
   document.querySelectorAll('[data-deck]').forEach(function (b) {
     b.addEventListener('click', function () {

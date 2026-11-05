@@ -28,6 +28,24 @@ Die Schwelle ändert vor allem, wie schnell es geht. Mit einem Blatt:
 
 Ohne Joker ändert die Schwelle nur die Zahl der Züge, nicht die Karten und Fehler: Alle wählen dieselbe beste Karte, egal wer gerade dran ist. Mit Jokern ist „nie weiterspielen“ überraschend schnell. Die Felder neben Jokern bleiben dann liegen, bis sonst nichts mehr frei ist, und helfen am Ende als fast sichere Pflichtkarten.
 
+## Doppelfenster
+
+Zweiter Spielmodus: Zwei Fenster liegen direkt nebeneinander und teilen sich die mittlere Spalte. Das ergibt 5 × 9 Felder mit 8 Lücken, also 37 Karten.
+
+```
+ E  ■  ■  ■  E  ■  ■  ■  E      E = Ecke, zu Beginn offen (6 Stück)
+ ■  ·  ■  ·  ■  ·  ■  ·  ■      · = Lücke
+ ■  ■  ■  ■  M  ■  ■  ■  ■      M = Mitte, wird als letzte aufgedeckt (Rot oder Schwarz)
+ ■  ·  ■  ·  ■  ·  ■  ·  ■
+ E  ■  ■  ■  E  ■  ■  ■  E
+```
+
+- Die letzte Karte ist die Mitte der geteilten Spalte. Die Mitten der beiden einzelnen Fenster sind normale Karten und dürfen von Anfang an aufgedeckt werden.
+- Bei Feldern mit mehr als zwei offenen Nachbarn darf man sich für „Dazwischen“ und „Nicht dazwischen“ zwei beliebige Nachbarn aussuchen.
+- Sonst gelten dieselben Regeln. Weil über die geteilte Spalte bald alles zusammenhängt, räumt ein Fehler nach § 7 oft beide Fenster ab. Ein Doppelfenster dauert deshalb etwa 15-mal so lange wie ein Einzelfenster.
+
+Im Browser über „Feld: Doppelfenster“, auf der Kommandozeile mit `--feld doppel`.
+
 ## Benutzen
 
 **Im Browser:** `Fenster-Simulator.html` öffnen, ohne Installation und ohne Server. Die Seite rechnet beide Fälle mit Web Workern, zeigt währenddessen ein laufendes Beispielspiel und danach den Vergleich.
@@ -41,7 +59,7 @@ node cli.js --modus zug         # einzelne Züge statt ganzer Spiele
 node cli.js --json              # Ausgabe als JSON
 ```
 
-Weitere Optionen: `--joker`, `--seed`, `--threads`, `--schwelle 70` (nach den Pflichtkarten weiter ab 70 % Trefferchance, Standard 80) oder `--schwelle aus` (immer sofort weitergeben). Gleicher Seed ergibt das gleiche Ergebnis, egal wie viele Threads rechnen.
+Weitere Optionen: `--joker`, `--seed`, `--threads`, `--schwelle 70` (nach den Pflichtkarten weiter ab 70 % Trefferchance, Standard 80) oder `--schwelle aus` (immer sofort weitergeben), `--feld doppel` (Doppelfenster). Gleicher Seed ergibt das gleiche Ergebnis, egal wie viele Threads rechnen.
 
 ## Regeln im Modell
 

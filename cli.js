@@ -8,6 +8,7 @@
 //   node cli.js --json                   Ausgabe als JSON
 //   node cli.js --schwelle 70            nach den Pflichtkarten weiter ab 70 % Trefferchance (Standard 80)
 //   node cli.js --schwelle aus           nach den Pflichtkarten immer sofort weitergeben
+//   node cli.js --feld doppel            Doppelfenster (zwei Fenster mit geteilter Mittelspalte)
 //
 // Die Arbeit wird in feste Blöcke geteilt (Seed pro Block: seed + i * 1000003).
 // Das Ergebnis hängt deshalb nicht von der Anzahl der Threads ab.
@@ -23,7 +24,7 @@ if (!isMainThread) {
 }
 
 function parseArgs(argv) {
-  const o = { modus: 'spiel', blatt: 1, joker: null, n: null, seed: 2026, threads: os.availableParallelism ? os.availableParallelism() : os.cpus().length, json: false, schwelle: '80' };
+  const o = { modus: 'spiel', blatt: 1, joker: null, n: null, seed: 2026, threads: os.availableParallelism ? os.availableParallelism() : os.cpus().length, json: false, schwelle: '80', feld: 'einzel' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--json') o.json = true;
@@ -40,16 +41,19 @@ function parseArgs(argv) {
     o.threshold = parseFloat(o.schwelle) / 100;
     if (!(o.threshold >= 0 && o.threshold <= 1)) throw new Error('--schwelle muss zwischen 0 und 100 liegen oder aus sein');
   }
-  o.n = o.n === null ? (o.modus === 'spiel' ? 20000 : 1000000) : parseInt(o.n, 10);
+  if (o.feld !== 'einzel' && o.feld !== 'doppel') throw new Error('--feld muss einzel oder doppel sein');
+  o.layout = o.feld === 'doppel' ? 'double' : 'single';
+  const big = o.layout === 'double';
+  o.n = o.n === null ? (o.modus === 'spiel' ? (big ? 2000 : 20000) : 1000000) : parseInt(o.n, 10);
   return o;
 }
 
-function runParallel({ mode, decks, jokers, total, seed, threads, threshold }) {
-  const chunk = mode === 'game' ? 500 : 25000;
+function runParallel({ mode, decks, jokers, total, seed, threads, threshold, layout }) {
+  const chunk = mode === 'game' ? (layout === 'double' ? 100 : 500) : 25000;
   const jobs = [];
   for (let i = 0; i * chunk < total; i++) {
     const n = Math.min(chunk, total - i * chunk);
-    jobs.push({ id: i, mode, decks, jokers, threshold, seed: (seed + i * 1000003) >>> 0, trials: n, games: n });
+    jobs.push({ id: i, mode, decks, jokers, threshold, layout, seed: (seed + i * 1000003) >>> 0, trials: n, games: n });
   }
   const results = new Array(jobs.length);
   let next = 0, done = 0;
@@ -140,15 +144,15 @@ async function main() {
   const rows = [];
   for (const c of cases) {
     const t0 = Date.now();
-    const stats = await runParallel({ mode, decks: o.blatt, jokers: c.jokers, total: o.n, seed: o.seed, threads: o.threads, threshold: o.threshold });
+    const stats = await runParallel({ mode, decks: o.blatt, jokers: c.jokers, total: o.n, seed: o.seed, threads: o.threads, threshold: o.threshold, layout: o.layout });
     const r = mode === 'game' ? summarizeGames(stats) : summarizeTurns(stats);
     rows.push({ ...c, r, sekunden: (Date.now() - t0) / 1000 });
   }
   if (o.json) {
-    console.log(JSON.stringify({ modus: o.modus, blatt: o.blatt, seed: o.seed, schwelle: o.threshold, faelle: rows }, null, 2));
+    console.log(JSON.stringify({ modus: o.modus, blatt: o.blatt, seed: o.seed, feld: o.feld, schwelle: o.threshold, faelle: rows }, null, 2));
     return;
   }
-  console.log(`\nFenster aufmachen · ${o.modus === 'spiel' ? 'ganze Spiele' : 'einzelne Züge'} · ${o.blatt * 52} Karten · Schwelle ${o.threshold === null ? 'aus' : Math.round(o.threshold * 100) + ' %'} · Seed ${o.seed} · ${o.threads} Threads\n`);
+  console.log(`\nFenster aufmachen · ${o.feld === 'doppel' ? 'Doppelfenster' : 'Einzelfenster'} · ${o.modus === 'spiel' ? 'ganze Spiele' : 'einzelne Züge'} · ${o.blatt * 52} Karten · Schwelle ${o.threshold === null ? 'aus' : Math.round(o.threshold * 100) + ' %'} · Seed ${o.seed} · ${o.threads} Threads\n`);
   printTable(rows, mode);
   rows.forEach((x) => { if (x.r.zuegeUeber) console.log(`\nHinweis (${x.fall}): ${x.r.zuegeUeber}.`); });
   console.log(`\nRechenzeit: ${rows.map((x) => num(x.sekunden) + ' s').join(', ')}`);

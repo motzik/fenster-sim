@@ -4,8 +4,11 @@ const sim = require('../sim_core.js');
 // Baut einen Spielstand von Hand.
 // open: { feld: wert } mit 0 = Joker, 2..14 = Rang (Ass = 14).
 // Die offenen Karten werden aus dem unbekannten Rest herausgerechnet, genau wie im Spiel.
-function makeState({ decks = 1, jokers = 0, open = {} } = {}) {
-  const st = { revealed: new Int8Array(25), value: new Int8Array(25), counts: new Int16Array(15), N: 0 };
+// layout: 'single' (Einzelfenster, Standard) oder 'double' (Doppelfenster).
+function makeState({ decks = 1, jokers = 0, open = {}, layout = 'single' } = {}) {
+  sim.setLayout(layout);
+  const size = sim.layout().size;
+  const st = { revealed: new Int8Array(size), value: new Int8Array(size), counts: new Int16Array(15), N: 0 };
   for (let r = 2; r <= 14; r++) st.counts[r] = 4 * decks;
   st.counts[0] = jokers;
   st.N = 52 * decks + jokers;

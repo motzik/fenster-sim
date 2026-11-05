@@ -78,6 +78,24 @@ Die Simulation trifft dafür die Annahmen aus Abschnitt 5. Falls das Regelwerk a
 - **Weiterspielen nach den Pflichtkarten (neu, ersetzt „Gratiskarten“ und „immer weitergeben“):** Der Spieler deckt freiwillig weiter auf und verteilt dafür nach § 6 Schlucke. Er nimmt jeweils die beste Karte (ohne Sperre) und macht weiter, solange `p ≥ Schwelle` und `p · Gewinn > (1 − p) · (erspielte Schlucke + Schlucke nach § 7 bei einem Fehler)`. Die Schwelle ist ein Wert für alle Spieler, Standard 80 % (`--schwelle`, im Browser „Weiterspielen ab“). Felder neben Jokern (um 98 %) fallen fast immer darunter. Eine Normalverteilung der Schwelle pro Spieler (z. B. 80 % ± 7,5 %) ist vorgeschlagen, aber noch nicht eingebaut.
 - **Folge ohne Joker:** Alle Spieler wählen dieselbe beste Karte. Ob ein Spieler weitermacht oder der nächste übernimmt, ergibt dann genau dieselbe Kartenfolge und dieselben Fehler. Die Schwelle ändert ohne Joker nur die Zahl der Züge und die verteilten Schlucke. Mit Jokern ist das anders, weil die Sperre nur für Pflichtkarten gilt.
 
+### Doppelfenster (zweiter Spielmodus, vom Autor festgelegt)
+
+Zwei Fenster liegen nebeneinander und teilen sich die mittlere Spalte: 5 × 9 Felder (Index Zeile · 9 + Spalte), Lücken 10, 12, 14, 16, 28, 30, 32, 34, also 37 Karten.
+
+```
+ E  ■  ■  ■  E  ■  ■  ■  E
+ ■  ·  ■  ·  ■  ·  ■  ·  ■
+ ■  ■  M1 ■  M  ■  M2 ■  ■
+ ■  ·  ■  ·  ■  ·  ■  ·  ■
+ E  ■  ■  ■  E  ■  ■  ■  E
+```
+
+- 6 Ecken, zu Beginn offen (0, 4, 8, 36, 40, 44). Auch die zwei Ecken auf der geteilten Spalte.
+- Die Mitte der geteilten Spalte (Feld 22) verhält sich wie die alte Mitte: Sie kommt zuletzt, Rot oder Schwarz.
+- M1 und M2 (die Mitten der Einzelfenster) sind normale Karten, von Anfang an aufdeckbar.
+- Bei mehr als zwei offenen Nachbarn darf man zwei beliebige für „Dazwischen“ und „Nicht dazwischen“ wählen. Das Modell probiert dafür alle Paare durch (gilt auch im Einzelfenster).
+- Alles andere wie im Einzelfenster. Im Code: `setLayout('double')` bzw. `cfg.layout = 'double'`, CLI `--feld doppel`.
+
 ## 5. Modell der Simulation
 
 Ein perfekter Spieler spielt einen Zug:

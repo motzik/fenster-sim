@@ -109,3 +109,35 @@ test('Protokoll: Spielfeld nachspielen ergibt am Ende ein volles Fenster', () =>
   }
   for (const c of sim.CELLS) assert.equal(open[c], 1, `Feld ${c} ist am Ende nicht offen`);
 });
+
+// ----- Doppelfenster -----
+test('Doppelfenster: jedes Spiel endet, mit und ohne Joker', () => {
+  for (const jokers of [0, 2]) {
+    const st = sim.runGames({ decks: 1, jokers, games: 40, seed: 3, layout: 'double' });
+    assert.equal(st.aborted, 0);
+    assert.equal(st.games, 40);
+    assert.ok(st.midTries >= 40);
+  }
+});
+
+test('Doppelfenster: Protokoll endet mit vollem Fenster, Mitte zuletzt', () => {
+  const tr = sim.traceGame({ decks: 1, jokers: 2, seed: 8, layout: 'double' });
+  const L = sim.layout();
+  const open = new Array(L.size).fill(0);
+  let lastHit = null;
+  for (const e of tr.log) {
+    if (e.t === 'deal' || e.t === 'fail') for (const [c, , o] of e.cells) open[c] = o;
+    if (e.t === 'card' && e.hit) { open[e.cell] = 1; lastHit = e.cell; }
+  }
+  for (const c of L.cells) assert.equal(open[c], 1, `Feld ${c} ist am Ende nicht offen`);
+  assert.equal(lastHit, L.mid);
+  const st = sim.runGames({ decks: 1, jokers: 2, games: 1, seed: 8, layout: 'double' });
+  assert.equal(tr.turns, st.turns);
+});
+
+test('Doppelfenster: Zugmodus läuft und ist reproduzierbar', () => {
+  const cfg = { decks: 1, jokers: 2, trials: 5000, seed: 4, layout: 'double' };
+  const a = sim.runBatch(cfg);
+  assert.deepEqual(a, sim.runBatch(cfg));
+  assert.ok(a.pass3 > 0);
+});
