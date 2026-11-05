@@ -46,6 +46,17 @@ Zweiter Spielmodus: Zwei Fenster liegen direkt nebeneinander und teilen sich die
 
 Im Browser über „Feld: Doppelfenster“, auf der Kommandozeile mit `--feld doppel`.
 
+Ergebnis (Weiterspielen ab 80 %, Seed 2026; 1 Blatt je 10.000 Spiele, 2 Blätter je 5.000):
+
+| Blatt | Fall | Ø Züge | Median | 90 % der Spiele | Ø verteilte Schlucke |
+|---|---|---|---|---|---|
+| 52 Karten | ohne Joker | 1.633 | 1.116 | ≤ 3.728 | 2.042 |
+| 52 Karten | mit 2 Jokern und Sperre | 782 | 545 | ≤ 1.791 | 2.125 |
+| 104 Karten | ohne Joker | 2.415 | 1.646 | ≤ 5.585 | 2.354 |
+| 104 Karten | mit 6 Jokern und Sperre | 800 | 567 | ≤ 1.802 | 2.324 |
+
+Mit Jokern halbiert sich die Spieldauer beim Doppelfenster mit einem Blatt (−52 %), mit zwei Blättern bleibt nur ein Drittel (−67 %). Der Joker hilft hier noch mehr als im Einzelfenster.
+
 ## Benutzen
 
 **Im Browser:** `Fenster-Simulator.html` öffnen, ohne Installation und ohne Server. Die Seite rechnet beide Fälle mit Web Workern, zeigt währenddessen ein laufendes Beispielspiel und danach den Vergleich.

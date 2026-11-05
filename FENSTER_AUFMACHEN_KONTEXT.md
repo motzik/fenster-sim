@@ -189,6 +189,23 @@ Lesart:
 - Gratiskarten bringen dem Spieler im Schnitt rund 33 (bzw. 47) verteilte Schlucke pro Spiel, **verlängern aber das Spiel** von 59 auf 83 Züge. Grund: Ohne Gratiskarten bleiben die Felder neben Jokern liegen, bis sonst nichts mehr frei ist. Dann entfällt die Sperre, und sie werden zu fast sicheren Pflichtkarten. Mit Gratiskarten sind diese leichten Felder schon verbraucht, und der seltene Fehler (Joker neben Joker) räumt nach § 7 viel ab.
 - Der Spieler im Modell entscheidet über Gratiskarten nur nach seinen eigenen Schlucken, nicht nach der Spieldauer. Das entspricht vermutlich dem echten Verhalten am Tisch.
 
+### Doppelfenster (aktueller Stand)
+
+Schwelle 80 %, Seed 2026, `node cli.js --feld doppel --n 10000` bzw. `--blatt 2 --n 5000`. Ausgaben in `ergebnisse/doppel_*.txt`.
+
+| Blatt | Joker | Spiele | Ø Züge | Median | 90 % | Ø Fehler | Ø getrunken § 7 | Ø Zusatzkarten | davon neben Joker | Ø verteilt § 6 | Sperre greift |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 52 | 0 | 10.000 | 1.632,6 ± 32,3 | 1.116 | ≤ 3.728 | 1.994 | 11.461 | 1.262 | – | 2.042 | – |
+| 52 | 2 | 10.000 | 781,8 ± 15,3 | 545 | ≤ 1.791 | 956 | 6.094 | 1.083 | 313 | 2.125 | 11,5 % |
+| 104 | 0 | 5.000 | 2.414,5 ± 67,6 | 1.646 | ≤ 5.585 | 3.033 | 16.676 | 1.546 | – | 2.354 | – |
+| 104 | 6 | 5.000 | 799,8 ± 22,1 | 567 | ≤ 1.802 | 1.015 | 6.388 | 1.169 | 467 | 2.324 | 17,0 % |
+
+Lesart:
+
+- Ein Doppelfenster dauert rund 15-mal (ohne Joker) bzw. 12-mal (mit Jokern) so lange wie ein Einzelfenster. Über die geteilte Spalte hängt bald alles zusammen, ein Fehler nach § 7 räumt dann beide Fenster ab, und bis zur Mitte müssen 31 statt 17 verdeckte Karten richtig sein.
+- Mit Jokern −52 % (1 Blatt) bzw. −67 % (2 Blätter). Die Joker helfen im Doppelfenster also noch stärker.
+- Ein Spiel ohne Joker mit 2 Blättern lag über 20.000 Zügen (oberstes Histogrammfach). Median und 90-%-Wert sind davon nicht betroffen.
+
 Frühere Vorabrechnung (nur Spielstände, ohne simulierte Züge, 40.000 Stände): Die beste Wette auf die nächste Karte liegt im Schnitt bei etwa 88 %, mit und ohne Joker praktisch gleich. Die Sperrregel änderte den besten Zug dort in etwa 0,7 % (einfach) bis 1,1 % (doppelt) der Stände. Diese Zahlen sind durch die Zugsimulation überholt.
 
 ## 7. Bereits gebaute Ergebnisseiten (Claude-Artefakte)

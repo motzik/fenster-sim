@@ -1,0 +1,11 @@
+
+Fenster aufmachen · Doppelfenster · ganze Spiele · 104 Karten · Schwelle 80 % · Seed 2026 · 12 Threads
+
+Fall            Joker  Spiele   Ø Züge  ± 95 %  Median  90 %  Ø Fehler  Ø getrunken §7  Ø Zusatz  davon Joker  Ø verteilt §6  Sperre greift
+──────────────  ─────  ──────  ───────  ──────  ──────  ────  ────────  ──────────────  ────────  ───────────  ─────────────  ─────────────
+1 · ohne Joker  0       5 000  2 414,5    67,6    1646  5585   3 033,2          16 676   1 546,2            –        2 354,0              –
+2 · mit Sperre  6       5 000    799,8    22,1     567  1802   1 014,7           6 388   1 168,6        466,5        2 324,1        17,00 %
+
+Hinweis (1 · ohne Joker): 1 Spiele mit 20000 oder mehr Zügen.
+
+Rechenzeit: 93,6 s, 31,9 s
